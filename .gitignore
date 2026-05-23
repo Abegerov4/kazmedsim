@@ -1,0 +1,27 @@
+# Environment
+.env.local
+.env
+
+# Secrets / local tooling
+.mcp.json
+.claude/
+.playwright-mcp/
+
+# Node
+node_modules/
+.next/
+out/
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+*.egg-info/
+*.egg-info/
+
+# Database (keep schema.sql, ignore binary)
+db/*.db
+
+# OS
+.DS_Store

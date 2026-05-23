@@ -1,0 +1,248 @@
+@import "tailwindcss";
+
+/* ============================================================
+   KazMedSim — "Calm Clinical" design system
+   Original medical aesthetic: teal-blue primary, soft surfaces,
+   layered shadows, tasteful clinical motifs (pulse, cross).
+   ============================================================ */
+
+:root {
+  /* Ink / text */
+  --ink:        #15243B;
+  --ink-soft:   #5C6E84;
+  --ink-faint:  #93A1B2;
+
+  /* Surfaces */
+  --bg:         #EAF1F4;
+  --bg-deep:    #DEE9ED;
+  --surface:    #FFFFFF;
+  --surface-2:  #F3F8FA;
+
+  /* Brand — teal-leaning medical blue */
+  --primary:        #1B7A8F;
+  --primary-deep:   #115C6E;
+  --primary-bright: #2A9BB0;
+  --primary-soft:   #DCEDF0;
+  --primary-tint:   #EEF6F8;
+
+  /* Secondary — healthy mint-green */
+  --mint:       #3FA98C;
+  --mint-deep:  #2C8770;
+  --mint-soft:  #DEF1EA;
+
+  /* Accent — warm coral (energy, CTA highlight) */
+  --coral:      #E97356;
+  --coral-deep: #CF5A3F;
+  --coral-soft: #FBE5DE;
+
+  /* Kazakh ornament gold */
+  --gold:       #CC9A3F;
+  --gold-soft:  #F7EED7;
+
+  /* Status */
+  --danger:     #D9534F;
+  --danger-soft:#FBE3E2;
+  --warn:       #E0A82E;
+  --warn-soft:  #FBEFD3;
+
+  /* Lines */
+  --border:      #D7E3E8;
+  --border-soft: #E7EFF2;
+
+  /* Radii */
+  --r-xs: 8px;
+  --r-sm: 11px;
+  --r-md: 15px;
+  --r-lg: 22px;
+  --r-xl: 30px;
+
+  /* Shadows */
+  --shadow-sm: 0 1px 2px rgba(21,36,59,.05), 0 2px 6px -2px rgba(21,36,59,.06);
+  --shadow-md: 0 4px 14px -4px rgba(21,36,59,.10), 0 2px 6px -3px rgba(21,36,59,.08);
+  --shadow-lg: 0 22px 48px -20px rgba(17,92,110,.40), 0 8px 20px -12px rgba(21,36,59,.16);
+  --shadow-glow: 0 0 0 4px rgba(27,122,143,.13);
+
+  --ease: cubic-bezier(.22,.61,.36,1);
+}
+
+* { box-sizing: border-box; }
+
+html { -webkit-text-size-adjust: 100%; }
+
+body {
+  background: var(--bg);
+  color: var(--ink);
+  font-family: "Plus Jakarta Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-feature-settings: "ss01", "cv05";
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+::selection { background: var(--primary-soft); color: var(--primary-deep); }
+
+:focus-visible {
+  outline: none;
+  box-shadow: var(--shadow-glow);
+  border-radius: var(--r-sm);
+}
+
+/* Scrollbars */
+* { scrollbar-width: thin; scrollbar-color: var(--border) transparent; }
+*::-webkit-scrollbar { width: 9px; height: 9px; }
+*::-webkit-scrollbar-thumb { background: var(--border); border-radius: 99px; border: 2px solid transparent; background-clip: padding-box; }
+*::-webkit-scrollbar-thumb:hover { background: var(--ink-faint); }
+.no-scrollbar { scrollbar-width: none; }
+.no-scrollbar::-webkit-scrollbar { display: none; }
+
+/* ── Reusable components ───────────────────────────────────── */
+
+.app-bg {
+  position: relative;
+  background:
+    radial-gradient(720px 520px at 12% -8%, var(--primary-tint), transparent 70%),
+    radial-gradient(680px 560px at 96% 8%, var(--mint-soft), transparent 72%),
+    radial-gradient(620px 620px at 78% 108%, var(--coral-soft), transparent 70%),
+    var(--bg);
+}
+
+.surface-card {
+  background: var(--surface);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow-md);
+}
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: .5rem;
+  font-weight: 700;
+  font-size: .9rem;
+  line-height: 1;
+  border-radius: var(--r-md);
+  cursor: pointer;
+  transition: transform .14s var(--ease), box-shadow .2s var(--ease),
+              background .2s var(--ease), opacity .15s;
+  user-select: none;
+}
+.btn:active { transform: translateY(1px) scale(.99); }
+.btn:disabled { opacity: .42; cursor: not-allowed; transform: none; }
+
+.btn-primary {
+  color: #fff;
+  background: linear-gradient(140deg, var(--primary-bright), var(--primary-deep));
+  box-shadow: 0 8px 20px -8px rgba(17,92,110,.55);
+}
+.btn-primary:not(:disabled):hover { transform: translateY(-2px); box-shadow: 0 14px 28px -10px rgba(17,92,110,.6); }
+
+.btn-coral {
+  color: #fff;
+  background: linear-gradient(140deg, #F0865F, var(--coral-deep));
+  box-shadow: 0 8px 20px -8px rgba(207,90,63,.5);
+}
+.btn-coral:not(:disabled):hover { transform: translateY(-2px); box-shadow: 0 14px 28px -10px rgba(207,90,63,.55); }
+
+.btn-ghost {
+  color: var(--ink);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-sm);
+}
+.btn-ghost:not(:disabled):hover { transform: translateY(-2px); border-color: var(--primary); color: var(--primary-deep); }
+
+.field {
+  width: 100%;
+  background: var(--surface-2);
+  border: 1.5px solid var(--border);
+  border-radius: var(--r-md);
+  color: var(--ink);
+  transition: border-color .16s, box-shadow .16s, background .16s;
+}
+.field::placeholder { color: var(--ink-faint); }
+.field:focus { outline: none; background: var(--surface); border-color: var(--primary); box-shadow: var(--shadow-glow); }
+
+.chip {
+  display: inline-flex; align-items: center; gap: .4rem;
+  border-radius: 999px;
+  font-weight: 700;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: transform .14s var(--ease), background .18s, color .18s, box-shadow .18s;
+}
+.chip:active { transform: scale(.96); }
+
+/* ── Animations ────────────────────────────────────────────── */
+
+@keyframes pulse-ring {
+  0%   { box-shadow: 0 0 0 0 rgba(27,122,143,.42); }
+  70%  { box-shadow: 0 0 0 14px rgba(27,122,143,0); }
+  100% { box-shadow: 0 0 0 0 rgba(27,122,143,0); }
+}
+.btn-pulse { animation: pulse-ring 2.4s infinite; }
+
+/* ECG pulse — draws fully across, then flows off, loops seamlessly forever (polyline uses pathLength=100) */
+@keyframes ecg-draw {
+  0%   { stroke-dashoffset: 100; }
+  50%  { stroke-dashoffset: 0; }
+  100% { stroke-dashoffset: -100; }
+}
+.ecg-line {
+  stroke-dasharray: 100;
+  stroke-dashoffset: 100;
+  animation: ecg-draw 5s ease-in-out infinite;
+}
+@keyframes ecg-dot {
+  0%, 100% { transform: scale(1);    opacity: 1;  }
+  50%      { transform: scale(1.55); opacity: .5; }
+}
+.ecg-dot {
+  transform-origin: center;
+  transform-box: fill-box;
+  animation: ecg-dot 2.4s ease-in-out infinite;
+}
+
+@keyframes rise {
+  from { opacity: 0; transform: translateY(16px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.anim-rise { animation: rise .5s var(--ease) both; }
+
+@keyframes pop {
+  0%   { opacity: 0; transform: scale(.9); }
+  60%  { opacity: 1; transform: scale(1.03); }
+  100% { opacity: 1; transform: scale(1); }
+}
+.anim-pop { animation: pop .42s var(--ease) both; }
+
+@keyframes fade-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+.anim-fade { animation: fade-in .35s ease both; }
+
+@keyframes float-soft {
+  0%, 100% { transform: translateY(0); }
+  50%      { transform: translateY(-12px); }
+}
+.anim-float { animation: float-soft 6s ease-in-out infinite; }
+
+@keyframes spin { to { transform: rotate(360deg); } }
+.anim-spin { animation: spin .9s linear infinite; }
+
+@keyframes shimmer {
+  0% { background-position: -460px 0; }
+  100% { background-position: 460px 0; }
+}
+.skeleton {
+  background: linear-gradient(90deg, var(--surface-2) 25%, var(--bg-deep) 50%, var(--surface-2) 75%);
+  background-size: 460px 100%;
+  animation: shimmer 1.5s infinite linear;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: .001ms !important; animation-iteration-count: 1 !important; transition-duration: .001ms !important; }
+  /* The ECG pulse is a core brand element — keep it running even with reduced motion */
+  .ecg-line { animation: ecg-draw 5s ease-in-out infinite !important; }
+  .ecg-dot  { animation: ecg-dot 2.4s ease-in-out infinite !important; }
+}

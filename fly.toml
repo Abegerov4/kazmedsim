@@ -1,0 +1,29 @@
+# Fly.io config for the KazMedSim FastAPI backend.
+# Run `fly launch --no-deploy` once to claim a unique app name (then `fly deploy`).
+
+app = "kazmedsim-api"
+primary_region = "fra"  # Frankfurt — closest reliable region to Kazakhstan
+
+[build]
+
+[env]
+  PORT = "8000"
+  DB_PATH = "/app/db/kazmedsim.db"
+  # ALLOWED_ORIGINS set via `fly secrets set` (see DEPLOY.md)
+
+[http_service]
+  internal_port = 8000
+  force_https = true
+  auto_stop_machines = "stop"
+  auto_start_machines = true
+  min_machines_running = 0
+  processes = ["app"]
+
+[[mounts]]
+  source = "kazmedsim_data"
+  destination = "/app/db"
+
+[[vm]]
+  cpu_kind = "shared"
+  cpus = 1
+  memory_mb = 512
