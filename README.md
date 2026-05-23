@@ -1,137 +1,164 @@
-# 🏥 KazMedSim — Симулятор поликлиники
+# KazMedSim
 
-Браузерный симулятор поликлиники для обучения студентов-медиков Казахстана.  
-Интерфейс и диалоги на **русском и казахском** языках.
+A browser-based clinical simulator for Kazakh medical students. Bilingual
+(Russian / Kazakh), tool-using AI agents, 49 protocol-driven scenarios across
+seven specialties.
 
----
+Students chat with a virtual patient, conduct physical exam, order labs,
+choose diagnosis and treatment from a formulary, and receive a structured
+debrief from an AI mentor.
 
-## Стек
+## Features
 
-| Часть | Технологии |
-|-------|-----------|
-| Фронтенд | Next.js 14, TypeScript, Tailwind CSS |
-| Бэкенд | FastAPI (Python), Anthropic Claude API |
-| База данных | SQLite |
-| AI агенты | Claude Sonnet (пациент + куратор) |
+- **49 clinical scenarios** across 7 specialties (internal medicine,
+  cardiology, pulmonology, neurology, endocrinology, gastroenterology,
+  infectious disease) — 7 cases each
+- **Conversational patient** powered by Claude Sonnet 4.6 with full session
+  history, anamnesis, lab values and abnormal findings tailored per case
+- **Physical exam tab** — vitals (HR, BP, SpO₂, temp, RR) plus inspection,
+  auscultation, palpation, percussion findings per scenario
+- **Selectable labs** — student picks specific tests from a list mixed with
+  distractor / over-prescribed tests; grader counts excess and omissions
+- **Diagnosis picker + medication formulary** (40 drugs grouped by class)
+  replaces free-text entry
+- **Session timer** — 8-minute target window. Too short = penalty for
+  shallow anamnesis; too long = penalty for inefficient consultation
+- **AI medical assistant** with tool use (see below)
+- **Structured grading** — 5 rubrics (anamnesis / communication / reasoning /
+  diagnosis / treatment), each 0–10, with bilingual feedback
+- **Bilingual** — every label, prompt and grader output exists in `ru` and `kk`
 
----
+## AI Agent (tool use)
 
-## Быстрый старт
+The assistant chat on `/patients` is a tool-using agent (OpenAI `gpt-4o-mini`
+with function calling). Three deterministic tools ground its answers:
 
-### 1. Клонировать и установить зависимости
+| Tool | What it does |
+|---|---|
+| `search_medical_protocol(condition)` | Returns matching MoH RK / WHO protocol from the local DB (49 scenarios + emergency catalog: anaphylaxis, CPR, septic shock, AKI, acute HF) |
+| `clinical_calculator(name, params)` | CHA₂DS₂-VASc, Wells DVT, qSOFA, eGFR (CKD-EPI 2021), HEART score |
+| `drug_interactions(drugs)` | Checks pairwise interactions against a 27-entry catalog with class-aware matching (warfarin × NSAID, statin × macrolide, etc.) |
+
+The UI shows chips under each answer indicating which tools were consulted,
+so students can see when the model relies on grounded data vs its own memory.
+
+## Tech stack
+
+| Layer | Stack |
+|---|---|
+| Frontend | Next.js 16, React 19, TypeScript, Tailwind CSS v4 |
+| Backend | FastAPI, Uvicorn, Python 3.11+ |
+| Patient + Grader LLM | Anthropic Claude Sonnet 4.6 |
+| Assistant LLM | OpenAI `gpt-4o-mini` with function calling |
+| Database | SQLite (single file, no migration tooling) |
+
+## Quick start
+
+### 1. Install
 
 ```bash
-# Фронтенд
-npm install
-
-# Бэкенд
-pip install -r backend/requirements.txt
+npm install                              # frontend
+python -m venv .venv && source .venv/bin/activate
+pip install -r backend/requirements.txt  # backend
 ```
 
-### 2. Настроить переменные окружения
+### 2. Configure secrets
 
 ```bash
 cp .env.local.example .env.local
 ```
 
-Открой `.env.local` и добавь ключи:
+Edit `.env.local` — required keys:
 
 ```env
-ANTHROPIC_API_KEY=sk-ant-...       # Обязательно!
-ELEVENLABS_API_KEY=...             # Опционально (TTS)
-DEEPGRAM_API_KEY=...               # Опционально (STT)
+ANTHROPIC_API_KEY=sk-ant-...
+OPENAI_API_KEY=sk-proj-...
 NEXT_PUBLIC_API_URL=http://localhost:8000
 ```
 
-### 3. Инициализировать базу данных
+### 3. Seed the database
 
 ```bash
-python scripts/seed_db.py
+python scripts/seed_db.py            # base scenarios
+python scripts/seed_scenarios_v2.py  # +35 cases to fill out all specialties
 ```
 
-Создаст 3 сценария: ОРВИ, Внебольничная пневмония, Бруцеллёз.
-
-### 4. Запустить
+### 4. Run (two terminals)
 
 ```bash
-# Терминал 1 — бэкенд (FastAPI)
-uvicorn backend.main:app --reload --port 8000
+# Terminal 1 — backend
+source .venv/bin/activate
+uvicorn backend.main:app --reload --reload-dir backend
 
-# Терминал 2 — фронтенд (Next.js)
+# Terminal 2 — frontend
 npm run dev
 ```
 
-Открой: [http://localhost:3000](http://localhost:3000)
+Open http://localhost:3000.
 
----
+## User flow
 
-## Поток приложения
+1. **Home** — pick language (RU/KK), enter student name, start session
+2. **Intro** — 3 onboarding screens explaining the simulator
+3. **Patients** — browse scenarios filtered by specialty; floating AI
+   assistant chat available for questions
+4. **Session** — 2D consultation room with the patient seated; bottom HUD
+   has Record, Examination, Labs, Diagnosis tabs and free-text input for
+   the patient dialog; 8-minute timer counts down at the top
+5. **Grade** — five-rubric scorecard with concise feedback (collapsible
+   detail) from the Claude mentor
 
-```
-1. Главный экран → выбор языка (RU/KK) + имя студента
-2. Выбор сценария → карточки с уровнем сложности
-3. Кабинет врача:
-   - Чат с пациентом (агент Claude)
-   - Назначить анализы → мгновенные результаты
-   - Поставить диагноз и лечение
-   - Завершить приём
-4. Оценка куратора → 5 рубрик, баллы, обратная связь
-```
-
----
-
-## Сценарии
-
-| Slug | Болезнь | Сложность |
-|------|---------|-----------|
-| `arvi_adult` | ОРВИ у взрослого | Лёгкий |
-| `pneumonia_community` | Внебольничная пневмония | Средний |
-| `brucellosis` | Бруцеллёз | Средний |
-
-Добавить новый сценарий: отредактируй `scripts/seed_db.py` и запусти снова.
-
----
-
-## API эндпоинты
+## Project layout
 
 ```
-GET  /api/scenarios?lang=ru&difficulty=easy
-POST /api/session/start      { scenario_id, student_name, language }
-POST /api/session/message    { session_id, message }
+backend/                FastAPI app
+  main.py                 Routes (sessions, labs, grade, assistant)
+  scenarios.py            DB access for scenarios
+  grader.py               LLM grading logic
+  assistant_tools.py      3 tools + OpenAI schemas for the agent
+  prompts/                System prompts: patient/grader/assistant × ru/kk
+db/
+  schema.sql              Tables: scenarios, sessions, dialog_log
+  kazmedsim.db            SQLite (gitignored)
+docs/
+  DEPLOY.md               Step-by-step Fly.io + Vercel deploy guide
+public/labs/              X-ray and ECG images shown alongside lab results
+scripts/
+  seed_db.py              Base scenarios
+  seed_scenarios_v2.py    Additional 35 scenarios (idempotent)
+  entrypoint.sh           Docker entrypoint — inits schema + seeds on volume
+src/
+  app/                    Next.js App Router pages (intro, patients, session, grade)
+  components/             AssistantChat, PatientCard, MedIcon (SVG icon set)
+  lib/
+    api.ts                Typed HTTP client
+    clinicalData.ts       Diagnosis options, formulary, exam findings, distractor tests
+Dockerfile                Production image (uvicorn + entrypoint)
+fly.toml                  Fly.io config with persistent volume for SQLite
+```
+
+## API
+
+```
+GET  /api/scenarios?lang=ru&specialty=cardiology
+POST /api/session/start       { scenario_id, student_name, language }
+POST /api/session/message     { session_id, message }
 GET  /api/session/{id}/labs
-POST /api/session/end        { session_id, student_diagnosis, student_treatment }
+POST /api/session/end         { session_id, student_diagnosis, student_treatment,
+                                ordered_tests, examined, elapsed_seconds }
+POST /api/assistant           { messages: [{role, content}], language }
 ```
 
-Документация Swagger: [http://localhost:8000/docs](http://localhost:8000/docs)
+OpenAPI/Swagger UI: http://localhost:8000/docs
 
----
+## Deploy
 
-## Структура проекта
+See [docs/DEPLOY.md](docs/DEPLOY.md). Recommended path:
+**Fly.io** for the backend (Dockerfile + persistent volume for SQLite) +
+**Vercel** for the Next.js frontend. ~25 minutes for a first deploy.
 
-```
-├── src/                    # Next.js фронтенд
-│   ├── app/                # App Router страницы
-│   ├── i18n/               # Переводы RU/KK
-│   └── lib/api.ts          # HTTP клиент
-├── backend/
-│   ├── main.py             # FastAPI роуты
-│   ├── scenarios.py        # Загрузка сценариев
-│   ├── grader.py           # Оценка куратором
-│   └── prompts/            # Системные промпты (patient/grader × ru/kk)
-├── db/
-│   ├── schema.sql          # Схема базы данных
-│   └── kazmeds im.db       # SQLite (не коммитить)
-└── scripts/
-    └── seed_db.py          # Начальные данные
-```
+## Disclaimer
 
----
-
-## Дисклеймер
-
-> Этот симулятор предназначен исключительно для учебных целей.  
-> Клинические случаи синтетические. Не является медицинской рекомендацией.
-
----
-
-*Вдохновлён MedKit by Bedirhan Keskin — победитель хакатона Built with Claude Opus 4.7.*
+For educational use only. Clinical content is synthetic and curated against
+MoH RK protocols and international guidelines, but is not a substitute for
+clinical judgment or official documentation.

@@ -275,7 +275,15 @@ class AssistantRequest(BaseModel):
 
 @app.post("/api/assistant")
 def assistant(req: AssistantRequest):
+    """AI medical consultant — agentic loop with 3 tools.
+
+    Tools (see backend/assistant_tools.py):
+      • search_medical_protocol(condition)
+      • clinical_calculator(name, params)
+      • drug_interactions(drugs)
+    """
     from openai import OpenAI
+    from backend.assistant_tools import TOOL_SCHEMAS, TOOL_IMPLS
 
     lang = req.language if req.language in ("ru", "kk") else "ru"
     prompt_file = os.path.join(os.path.dirname(__file__), "prompts", f"assistant_{lang}.txt")
@@ -289,16 +297,108 @@ def assistant(req: AssistantRequest):
     if not history:
         raise HTTPException(status_code=400, detail="No messages")
 
+    messages: list[dict] = [{"role": "system", "content": system_prompt}, *history]
     client = OpenAI(api_key=os.environ["OPENAI_API_KEY"])
+    tools_used: list[dict] = []
+
+    MAX_TOOL_ITERATIONS = 4
     try:
-        response = client.chat.completions.create(
+        for _ in range(MAX_TOOL_ITERATIONS):
+            response = client.chat.completions.create(
+                model="gpt-4o-mini",
+                max_tokens=900,
+                temperature=0.3,
+                messages=messages,
+                tools=TOOL_SCHEMAS,
+            )
+            msg = response.choices[0].message
+            if not msg.tool_calls:
+                return {"reply": msg.content or "", "tools_used": tools_used}
+
+            # Record assistant's tool-call message
+            messages.append({
+                "role": "assistant",
+                "content": msg.content,
+                "tool_calls": [
+                    {
+                        "id": tc.id,
+                        "type": "function",
+                        "function": {"name": tc.function.name, "arguments": tc.function.arguments},
+                    }
+                    for tc in msg.tool_calls
+                ],
+            })
+
+            # Execute each tool and append result
+            for tc in msg.tool_calls:
+                impl = TOOL_IMPLS.get(tc.function.name)
+                if impl is None:
+                    result = {"error": f"Unknown tool: {tc.function.name}"}
+                else:
+                    try:
+                        args = json.loads(tc.function.arguments or "{}")
+                        result = impl(args)
+                    except Exception as e:
+                        result = {"error": f"Tool execution failed: {e}"}
+                chip = _summarize_tool_call(tc.function.name, result)
+                if chip:
+                    tools_used.append(chip)
+                messages.append({
+                    "role": "tool",
+                    "tool_call_id": tc.id,
+                    "content": json.dumps(result, ensure_ascii=False),
+                })
+
+        # Exceeded iterations — ask for a plain reply without tools
+        final = client.chat.completions.create(
             model="gpt-4o-mini",
-            max_tokens=700,
-            temperature=0.4,
-            messages=[{"role": "system", "content": system_prompt}, *history],
+            max_tokens=600,
+            temperature=0.3,
+            messages=messages,
         )
-        reply = response.choices[0].message.content
+        return {"reply": final.choices[0].message.content or "", "tools_used": tools_used}
+
     except Exception as e:
         raise HTTPException(status_code=502, detail=f"Assistant error: {e}")
 
-    return {"reply": reply}
+
+_CALC_LABELS = {
+    "cha2ds2vasc": "CHA₂DS₂-VASc",
+    "wells_dvt":   "Wells DVT",
+    "qsofa":       "qSOFA",
+    "ckd_epi":     "eGFR (CKD-EPI)",
+    "heart_score": "HEART",
+}
+
+
+def _summarize_tool_call(tool_name: str, result: dict) -> dict | None:
+    """Make a short chip-friendly summary of a tool call for the UI."""
+    if not isinstance(result, dict):
+        return None
+    if "error" in result:
+        return None
+
+    if tool_name == "search_medical_protocol":
+        if not result.get("found"):
+            return None
+        icd = result.get("icd10", "")
+        name = result.get("name", "")
+        return {"icon": "📋", "label": f"Протокол {icd} — {name}".strip(" —")}
+
+    if tool_name == "clinical_calculator":
+        if "score" in result or "egfr_ml_min_173m2" in result:
+            # Extract the calc identifier from interpretation if possible
+            interp = result.get("interpretation", "")
+            # Fallback: use first word of interp
+            return {"icon": "🧮", "label": interp}
+        return None
+
+    if tool_name == "drug_interactions":
+        warnings = result.get("warnings", [])
+        if not warnings:
+            return {"icon": "💊", "label": "Взаимодействия: не обнаружено"}
+        severities = [w.get("severity", "?") for w in warnings]
+        sev_str = ", ".join(severities)
+        return {"icon": "💊", "label": f"Взаимодействия: {len(warnings)} ({sev_str})"}
+
+    return None

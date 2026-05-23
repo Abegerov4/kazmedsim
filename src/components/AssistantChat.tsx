@@ -60,8 +60,8 @@ export function AssistantChat({ lang }: { lang: Lang }) {
     setInput("");
     setLoading(true);
     try {
-      const { reply } = await askAssistant(next, lang);
-      setMsgs((m) => [...m, { role: "assistant", content: reply }]);
+      const { reply, tools_used } = await askAssistant(next, lang);
+      setMsgs((m) => [...m, { role: "assistant", content: reply, tools_used }]);
     } catch {
       setMsgs((m) => [...m, { role: "assistant", content: L.error }]);
     }
@@ -139,23 +139,39 @@ export function AssistantChat({ lang }: { lang: Lang }) {
               {m.role === "user" ? (
                 m.content
               ) : (
-                <div className="kms-md">
-                  <ReactMarkdown
-                    components={{
-                      p: ({ children }) => <p className="my-1 first:mt-0 last:mb-0">{children}</p>,
-                      ul: ({ children }) => <ul className="list-disc pl-4 my-1 space-y-0.5">{children}</ul>,
-                      ol: ({ children }) => <ol className="list-decimal pl-4 my-1 space-y-0.5">{children}</ol>,
-                      li: ({ children }) => <li>{children}</li>,
-                      strong: ({ children }) => <strong style={{ color: "var(--primary-deep)" }}>{children}</strong>,
-                      h1: ({ children }) => <p className="font-extrabold my-1">{children}</p>,
-                      h2: ({ children }) => <p className="font-extrabold my-1">{children}</p>,
-                      h3: ({ children }) => <p className="font-bold my-1">{children}</p>,
-                      code: ({ children }) => <code style={{ background: "var(--surface-2)", padding: "1px 4px", borderRadius: 4 }}>{children}</code>,
-                    }}
-                  >
-                    {m.content}
-                  </ReactMarkdown>
-                </div>
+                <>
+                  <div className="kms-md">
+                    <ReactMarkdown
+                      components={{
+                        p: ({ children }) => <p className="my-1 first:mt-0 last:mb-0">{children}</p>,
+                        ul: ({ children }) => <ul className="list-disc pl-4 my-1 space-y-0.5">{children}</ul>,
+                        ol: ({ children }) => <ol className="list-decimal pl-4 my-1 space-y-0.5">{children}</ol>,
+                        li: ({ children }) => <li>{children}</li>,
+                        strong: ({ children }) => <strong style={{ color: "var(--primary-deep)" }}>{children}</strong>,
+                        h1: ({ children }) => <p className="font-extrabold my-1">{children}</p>,
+                        h2: ({ children }) => <p className="font-extrabold my-1">{children}</p>,
+                        h3: ({ children }) => <p className="font-bold my-1">{children}</p>,
+                        code: ({ children }) => <code style={{ background: "var(--surface-2)", padding: "1px 4px", borderRadius: 4 }}>{children}</code>,
+                      }}
+                    >
+                      {m.content}
+                    </ReactMarkdown>
+                  </div>
+                  {m.tools_used && m.tools_used.length > 0 && (
+                    <div className="flex flex-wrap gap-1 mt-2 pt-2"
+                      style={{ borderTop: "1px solid var(--border-soft)" }}>
+                      {m.tools_used.map((t, idx) => (
+                        <span key={idx}
+                          className="inline-flex items-center gap-1 text-[10.5px] font-semibold px-2 py-0.5 rounded-full"
+                          style={{ background: "var(--primary-tint)", color: "var(--primary-deep)", border: "1px solid var(--border-soft)" }}
+                          title="Источник, использованный ассистентом"
+                        >
+                          <span>{t.icon}</span> <span>{t.label}</span>
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </>
               )}
             </div>
           </div>

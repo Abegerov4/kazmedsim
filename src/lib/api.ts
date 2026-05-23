@@ -35,7 +35,8 @@ export async function getLabs(session_id: number) {
   return res.json();
 }
 
-export interface AssistantMsg { role: "user" | "assistant"; content: string }
+export interface ToolChip { icon: string; label: string }
+export interface AssistantMsg { role: "user" | "assistant"; content: string; tools_used?: ToolChip[] }
 
 export async function askAssistant(messages: AssistantMsg[], language: string) {
   const res = await fetch(`${API_URL}/api/assistant`, {
@@ -44,7 +45,7 @@ export async function askAssistant(messages: AssistantMsg[], language: string) {
     body: JSON.stringify({ messages, language }),
   });
   if (!res.ok) throw new Error("Failed to reach assistant");
-  return res.json() as Promise<{ reply: string }>;
+  return res.json() as Promise<{ reply: string; tools_used?: ToolChip[] }>;
 }
 
 export async function endSession(
