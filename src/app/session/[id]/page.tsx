@@ -43,8 +43,6 @@ const LABELS = {
     palpationL: "Пальпация",
     percussionL: "Перкуссия",
     pickTests: "Назначьте исследования",
-    relevantTests: "Доступные исследования",
-    extraTests: "Дополнительные исследования",
     noDeviation: "Без отклонений",
     ordered: "Заказано",
     timer: "Приём",
@@ -84,8 +82,6 @@ const LABELS = {
     palpationL: "Пальпация",
     percussionL: "Перкуссия",
     pickTests: "Зерттеулерді тағайындаңыз",
-    relevantTests: "Қолжетімді зерттеулер",
-    extraTests: "Қосымша зерттеулер",
     noDeviation: "Ауытқусыз",
     ordered: "Тағайындалды",
     timer: "Қабылдау",
@@ -125,8 +121,6 @@ const LABELS = {
     palpationL: "Palpation",
     percussionL: "Percussion",
     pickTests: "Order tests",
-    relevantTests: "Available tests",
-    extraTests: "Additional tests",
     noDeviation: "No abnormality",
     ordered: "Ordered",
     timer: "Visit",
@@ -399,6 +393,28 @@ export default function SessionPage() {
     const opts = DIAGNOSIS_OPTIONS[slug] ?? [];
     return [...opts].sort(() => Math.random() - 0.5);
   }, [scenario]);
+
+  // Mixed list of real labs + distractor tests, shuffled deterministically per
+  // scenario so the student can't tell which are relevant by position.
+  const allTests = useMemo(() => {
+    if (!labs || !scenario) return [] as { name: string; lab: Lab | null }[];
+    const items: { name: string; lab: Lab | null }[] = [
+      ...labs.map((lab) => ({ name: lab.name, lab })),
+      ...EXTRA_TESTS.map((t) => ({ name: t[lang], lab: null as Lab | null })),
+    ];
+    const slug = String(scenario.slug);
+    let seed = 0;
+    for (let i = 0; i < slug.length; i++) seed = (seed * 31 + slug.charCodeAt(i)) >>> 0;
+    const rand = () => {
+      seed = (seed * 1103515245 + 12345) >>> 0;
+      return seed / 0x100000000;
+    };
+    for (let i = items.length - 1; i > 0; i--) {
+      const j = Math.floor(rand() * (i + 1));
+      [items[i], items[j]] = [items[j], items[i]];
+    }
+    return items;
+  }, [labs, lang, scenario]);
 
   const exam = scenario ? EXAM_DATA[String(scenario.slug)] : undefined;
 
@@ -715,59 +731,51 @@ export default function SessionPage() {
                     </span>
                   </div>
 
-                  {([
-                    { head: L.relevantTests, items: labs.map((lab) => ({ name: lab.name, lab })) },
-                    { head: L.extraTests, items: EXTRA_TESTS.map((t) => ({ name: t[lang], lab: null as Lab | null })) },
-                  ]).map((group) => (
-                    <div key={group.head}>
-                      <p className="text-[10px] font-bold mb-1.5 tracking-wider" style={{ color: "#5E7782" }}>{group.head.toUpperCase()}</p>
-                      <div className="space-y-1.5">
-                        {group.items.map(({ name, lab }, i) => {
-                          const sel = orderedTests.includes(name);
-                          return (
-                            <div key={i}>
-                              <button onClick={() => toggleTest(name)}
-                                className="w-full text-left flex items-center gap-2.5 px-3 py-2.5 rounded-xl transition-all"
-                                style={{ background: sel ? "rgba(70,194,160,0.16)" : "rgba(255,255,255,0.04)", border: `1px solid ${sel ? "#46C2A0" : "rgba(255,255,255,0.07)"}` }}>
-                                <span className="w-5 h-5 rounded-md shrink-0 grid place-items-center"
-                                  style={{ background: sel ? "#46C2A0" : "transparent", border: `1.5px solid ${sel ? "#46C2A0" : "#5E7782"}` }}>
-                                  {sel && (
-                                    <svg width="11" height="11" viewBox="0 0 14 14">
-                                      <polyline points="2,7 6,11 12,3" fill="none" stroke="#fff" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" />
-                                    </svg>
-                                  )}
-                                </span>
-                                <span className="text-[12.5px] font-bold flex-1" style={{ color: sel ? "#EAF6F7" : "#D6ECEE" }}>{name}</span>
-                              </button>
-                              {sel && lab && (
-                                <div className="mt-1 mb-1.5 ml-7">
-                                  <div className="flex justify-between items-center py-2 px-3 rounded-xl"
-                                    style={{ background: lab.is_abnormal ? "rgba(232,112,91,0.16)" : "rgba(255,255,255,0.05)", border: `1px solid ${lab.is_abnormal ? "rgba(232,112,91,0.4)" : "rgba(255,255,255,0.09)"}` }}>
-                                    <span className="text-[11px]" style={{ color: "#9FB0B8" }}>{L.normal}: {lab.normal}</span>
-                                    <span className="text-xs font-extrabold" style={{ color: lab.is_abnormal ? "#F08A75" : "#5FD0B0" }}>
-                                      {lab.value} {lab.unit}
-                                    </span>
-                                  </div>
-                                  {lab.image_url && (
-                                    <div className="mt-1 rounded-xl overflow-hidden" style={{ border: "1px solid rgba(255,255,255,0.12)" }}>
-                                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                                      <img src={lab.image_url} alt={lab.name} className="w-full object-contain" style={{ maxHeight: 240, background: "#000" }} />
-                                    </div>
-                                  )}
-                                </div>
+                  <div className="space-y-1.5">
+                    {allTests.map(({ name, lab }, i) => {
+                      const sel = orderedTests.includes(name);
+                      return (
+                        <div key={i}>
+                          <button onClick={() => toggleTest(name)}
+                            className="w-full text-left flex items-center gap-2.5 px-3 py-2.5 rounded-xl transition-all"
+                            style={{ background: sel ? "rgba(70,194,160,0.16)" : "rgba(255,255,255,0.04)", border: `1px solid ${sel ? "#46C2A0" : "rgba(255,255,255,0.07)"}` }}>
+                            <span className="w-5 h-5 rounded-md shrink-0 grid place-items-center"
+                              style={{ background: sel ? "#46C2A0" : "transparent", border: `1.5px solid ${sel ? "#46C2A0" : "#5E7782"}` }}>
+                              {sel && (
+                                <svg width="11" height="11" viewBox="0 0 14 14">
+                                  <polyline points="2,7 6,11 12,3" fill="none" stroke="#fff" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" />
+                                </svg>
                               )}
-                              {sel && !lab && (
-                                <div className="mt-1 mb-1.5 ml-7 py-2 px-3 rounded-xl text-[11px]"
-                                  style={{ background: "rgba(255,255,255,0.05)", color: "#7C94A0", border: "1px solid rgba(255,255,255,0.09)" }}>
-                                  {L.noDeviation}
+                            </span>
+                            <span className="text-[12.5px] font-bold flex-1" style={{ color: sel ? "#EAF6F7" : "#D6ECEE" }}>{name}</span>
+                          </button>
+                          {sel && lab && (
+                            <div className="mt-1 mb-1.5 ml-7">
+                              <div className="flex justify-between items-center py-2 px-3 rounded-xl"
+                                style={{ background: lab.is_abnormal ? "rgba(232,112,91,0.16)" : "rgba(255,255,255,0.05)", border: `1px solid ${lab.is_abnormal ? "rgba(232,112,91,0.4)" : "rgba(255,255,255,0.09)"}` }}>
+                                <span className="text-[11px]" style={{ color: "#9FB0B8" }}>{L.normal}: {lab.normal}</span>
+                                <span className="text-xs font-extrabold" style={{ color: lab.is_abnormal ? "#F08A75" : "#5FD0B0" }}>
+                                  {lab.value} {lab.unit}
+                                </span>
+                              </div>
+                              {lab.image_url && (
+                                <div className="mt-1 rounded-xl overflow-hidden" style={{ border: "1px solid rgba(255,255,255,0.12)" }}>
+                                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                                  <img src={lab.image_url} alt={lab.name} className="w-full object-contain" style={{ maxHeight: 240, background: "#000" }} />
                                 </div>
                               )}
                             </div>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  ))}
+                          )}
+                          {sel && !lab && (
+                            <div className="mt-1 mb-1.5 ml-7 py-2 px-3 rounded-xl text-[11px]"
+                              style={{ background: "rgba(255,255,255,0.05)", color: "#7C94A0", border: "1px solid rgba(255,255,255,0.09)" }}>
+                              {L.noDeviation}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
                 </div>
               )}
 
