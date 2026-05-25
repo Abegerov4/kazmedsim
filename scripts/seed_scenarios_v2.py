@@ -10,10 +10,7 @@ import json
 import os
 import sqlite3
 
-DB_PATH = os.environ.get(
-    "DB_PATH",
-    os.path.join(os.path.dirname(__file__), "..", "db", "kazmedsim.db"),
-)
+DB_PATH = os.path.join(os.path.dirname(__file__), "..", "db", "kazmedsim.db")
 
 SPECIALTY_LABELS = {
     "internal_medicine":  {"ru": "Терапия",              "kk": "Терапия"},

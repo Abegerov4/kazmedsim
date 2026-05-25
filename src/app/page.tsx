@@ -12,7 +12,8 @@ const LABELS = {
     namePlaceholder: "Ваше имя",
     nameHint: "Так к вам будет обращаться система разбора",
     start: "Начать приём",
-    disclaimer: "Только для учебных целей · МЗ РК",
+    demoBadge: "ДЕМО-ВЕРСИЯ",
+    disclaimer: "Демо-проект · не аффилирован с МЗ РК · только для обучения",
     features: ["Реальные случаи", "Разбор по 5 критериям", "Русский · Қазақша"],
   },
   kk: {
@@ -21,7 +22,8 @@ const LABELS = {
     namePlaceholder: "Атыңыз",
     nameHint: "Талдау жүйесі сізге осылай жүгінеді",
     start: "Қабылдауды бастау",
-    disclaimer: "Тек оқу мақсатында · ҚР ДСМ",
+    demoBadge: "ДЕМО-НҰСҚА",
+    disclaimer: "Демо-жоба · ҚР ДСМ-мен ресми байланыссыз · тек оқуға арналған",
     features: ["Нақты жағдайлар", "5 өлшем бойынша талдау", "Русский · Қазақша"],
   },
 };
@@ -108,8 +110,20 @@ export default function HomePage() {
       {/* Main card */}
       <div className="surface-card w-full max-w-md overflow-hidden anim-rise relative z-10">
         {/* Brand header */}
-        <div className="px-8 pt-9 pb-2 text-center"
+        <div className="px-8 pt-7 pb-2 text-center"
           style={{ background: "linear-gradient(170deg, var(--primary-tint), var(--surface))" }}>
+          {/* Demo badge */}
+          <div className="flex justify-center mb-3">
+            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-extrabold tracking-[0.12em]"
+              style={{
+                background: "linear-gradient(140deg, #E8705B, #C9543E)",
+                color: "#fff",
+                boxShadow: "0 6px 14px -6px rgba(232,112,91,0.55)",
+              }}>
+              <span style={{ fontSize: 9 }}>●</span> {L.demoBadge}
+            </span>
+          </div>
+
           <div className="flex items-center justify-center gap-3">
             <span className="grid place-items-center rounded-2xl"
               style={{

@@ -3,10 +3,7 @@ import os
 import json
 from typing import Optional
 
-DB_PATH = os.environ.get(
-    "DB_PATH",
-    os.path.join(os.path.dirname(__file__), "..", "db", "kazmedsim.db"),
-)
+DB_PATH = os.path.join(os.path.dirname(__file__), "..", "db", "kazmedsim.db")
 
 
 def get_db():
@@ -65,6 +62,9 @@ def _localize(row: dict, language: str, public_only: bool = False) -> dict:
         "sources": json.loads(row["sources"]) if row["sources"] else [],
     }
     if public_only:
-        for key in ("disease", "correct_diagnosis", "treatment_protocol", "history", "allergies", "lab_results_json", "sources"):
+        # Strip anything that leaks the correct answer before the session starts.
+        # `icd10` is included because a code like J18.1 = the diagnosis itself.
+        for key in ("disease", "icd10", "correct_diagnosis", "treatment_protocol",
+                    "history", "allergies", "lab_results_json", "sources"):
             data.pop(key, None)
     return data

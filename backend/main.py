@@ -13,24 +13,15 @@ load_dotenv(".env.local")
 
 app = FastAPI(title="KazMedSim API")
 
-ALLOWED_ORIGINS = [
-    o.strip()
-    for o in os.environ.get("ALLOWED_ORIGINS", "http://localhost:3000").split(",")
-    if o.strip()
-]
-
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=ALLOWED_ORIGINS,
+    allow_origins=["http://localhost:3000"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-DB_PATH = os.environ.get(
-    "DB_PATH",
-    os.path.join(os.path.dirname(__file__), "..", "db", "kazmedsim.db"),
-)
+DB_PATH = os.path.join(os.path.dirname(__file__), "..", "db", "kazmedsim.db")
 
 
 def get_db():
@@ -57,6 +48,12 @@ class EndSessionRequest(BaseModel):
     ordered_tests: list[str] = []
     examined: bool = False
     elapsed_seconds: int = 0
+
+
+class VoiceTokenRequest(BaseModel):
+    scenario_id: int
+    student_name: str
+    language: str = "ru"
 
 
 # ── Routes ──────────────────────────────────────────────────────────────────
@@ -180,9 +177,14 @@ def get_labs(session_id: int):
     scenario = get_scenario(session["scenario_id"], session["language"])
     labs = json.loads(scenario["lab_results_json"])
 
+    is_kk = session["language"] == "kk"
     result = []
     for lab in labs:
-        name = lab["name_ru"] if session["language"] == "ru" else lab["name_kk"]
+        name = lab["name_kk"] if is_kk else lab["name_ru"]
+        # Descriptive fields may have language-specific overrides; fall back
+        # to the original `value`/`normal` (Russian) if no kk variant exists.
+        value = lab.get("value_kk", lab["value"]) if is_kk else lab["value"]
+        normal = lab.get("normal_kk", lab["normal"]) if is_kk else lab["normal"]
         if "is_abnormal" in lab:
             is_abnormal = lab["is_abnormal"]
         elif "normal_min" in lab and isinstance(lab["value"], (int, float)):
@@ -191,9 +193,9 @@ def get_labs(session_id: int):
             is_abnormal = False
         entry = {
             "name": name,
-            "value": lab["value"],
+            "value": value,
             "unit": lab["unit"],
-            "normal": lab["normal"],
+            "normal": normal,
             "is_abnormal": is_abnormal,
         }
         if "image_url" in lab:
@@ -221,6 +223,15 @@ def end_session(req: EndSessionRequest):
     )
 
     scenario = get_scenario(session["scenario_id"], session["language"])
+
+    # Anchor data so the grader doesn't improvise different "expected" criteria
+    # on every run. Same scenario + same student input → consistent score.
+    is_kk = session["language"] == "kk"
+    relevant_tests = [
+        (lab["name_kk"] if is_kk else lab["name_ru"])
+        for lab in json.loads(scenario["lab_results_json"])
+    ]
+
     grade = grade_session(
         transcript=transcript,
         correct_diagnosis=scenario["correct_diagnosis"],
@@ -230,6 +241,8 @@ def end_session(req: EndSessionRequest):
         ordered_tests=req.ordered_tests,
         examined=req.examined,
         elapsed_seconds=req.elapsed_seconds,
+        patient_history=scenario["history"],
+        relevant_tests=relevant_tests,
     )
 
     db.execute(
@@ -260,6 +273,136 @@ def end_session(req: EndSessionRequest):
     db.close()
 
     return {"grade": grade}
+
+
+# ── Voice mode: LiveKit JWT minter ────────────────────────────────────────────
+
+@app.post("/api/voice/token")
+def voice_token(req: VoiceTokenRequest):
+    """Create a LiveKit room for a voice session and mint a JWT for the student.
+
+    The room's metadata contains everything the voice_agent.py worker needs:
+    scenario id, formatted system prompt, initial line spoken by the patient,
+    language and gender. The worker auto-joins this room (it's registered
+    with the same LiveKit project).
+    """
+    from livekit import api as lk_api
+    from anthropic import Anthropic
+
+    # Voice mode is Russian-only — Cartesia has no native Kazakh voices and
+    # mixing Russian voices with Kazakh text produces broken speech.
+    if req.language != "ru":
+        raise HTTPException(
+            status_code=400,
+            detail="Voice mode is currently available only in Russian (ru). Use text mode for Kazakh.",
+        )
+
+    livekit_url = os.environ.get("LIVEKIT_URL")
+    livekit_key = os.environ.get("LIVEKIT_API_KEY")
+    livekit_secret = os.environ.get("LIVEKIT_API_SECRET")
+    if not (livekit_url and livekit_key and livekit_secret):
+        raise HTTPException(status_code=500, detail="LiveKit env vars not configured")
+
+    scenario = get_scenario(req.scenario_id, req.language)
+    if not scenario:
+        raise HTTPException(status_code=404, detail="Scenario not found")
+
+    # Build the patient persona system prompt (same template as text mode)
+    prompt_file = os.path.join(os.path.dirname(__file__), "prompts", f"patient_{req.language}.txt")
+    with open(prompt_file, encoding="utf-8") as f:
+        system_prompt = f.read().format(
+            name=scenario["patient_name"],
+            age=scenario["patient_age"],
+            gender=scenario["patient_gender"],
+            chief_complaint=scenario["chief_complaint"],
+            history=scenario["history"],
+            allergies=scenario["allergies"],
+            language="русском" if req.language == "ru" else "қазақ тілінде",
+        )
+
+    # Generate the patient's opening line ahead of time so the worker can
+    # speak it the moment it joins (no awkward silence on connect).
+    client = Anthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
+    intro = client.messages.create(
+        model="claude-haiku-4-5-20251001",
+        max_tokens=200,
+        system=system_prompt,
+        messages=[{
+            "role": "user",
+            "content": (
+                "Здравствуйте, я ваш врач. Расскажите, что вас беспокоит?"
+                if req.language == "ru"
+                else "Сәлеметсіз бе, мен сіздің дәрігеріңізмін. Не мазалап жүр?"
+            ),
+        }],
+    )
+    initial_line = intro.content[0].text
+
+    # Create a session row so the dialog log + grader still works for voice
+    db = get_db()
+    cur = db.execute(
+        "INSERT INTO sessions (scenario_id, student_name, language) VALUES (?, ?, ?)",
+        (req.scenario_id, req.student_name, req.language),
+    )
+    session_id = cur.lastrowid
+    db.execute(
+        "INSERT INTO dialog_log (session_id, role, message) VALUES (?, ?, ?)",
+        (session_id, "patient", initial_line),
+    )
+    db.commit()
+    db.close()
+
+    room_name = f"voice-session-{session_id}"
+    metadata = {
+        "case_id": req.scenario_id,
+        "session_id": session_id,
+        "language": req.language,
+        "gender": scenario["patient_gender"],
+        "system_prompt": system_prompt,
+        "initial_line": initial_line,
+    }
+
+    # Create the room with metadata so the worker sees it on join.
+    # (livekit-api uses async, but we wrap it in run.)
+    import asyncio
+
+    async def _create_room_and_token():
+        lk = lk_api.LiveKitAPI(livekit_url, livekit_key, livekit_secret)
+        try:
+            await lk.room.create_room(lk_api.CreateRoomRequest(
+                name=room_name,
+                metadata=json.dumps(metadata, ensure_ascii=False),
+                empty_timeout=120,   # auto-delete after 2 min idle
+                max_participants=2,  # student + agent
+            ))
+        finally:
+            await lk.aclose()
+
+        identity = f"student-{session_id}"
+        token = (
+            lk_api.AccessToken(livekit_key, livekit_secret)
+            .with_identity(identity)
+            .with_name(req.student_name or "Student")
+            .with_grants(lk_api.VideoGrants(
+                room_join=True,
+                room=room_name,
+                can_publish=True,
+                can_subscribe=True,
+                can_publish_data=True,
+            ))
+            .to_jwt()
+        )
+        return token
+
+    token = asyncio.run(_create_room_and_token())
+
+    return {
+        "session_id": session_id,
+        "room_name": room_name,
+        "ws_url": livekit_url,
+        "token": token,
+        "patient_intro": initial_line,
+    }
 
 
 # ── AI medical assistant ──────────────────────────────────────────────────────

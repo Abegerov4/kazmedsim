@@ -108,13 +108,10 @@ export function PatientCard({ scenario: s, lang, onStart, loading }: Props) {
 
       {/* Body */}
       <div className="flex flex-col flex-1 px-4 pt-3 pb-4">
-        {/* ICD + specialty */}
+        {/* Specialty */}
         <div className="flex items-center gap-2 flex-wrap mb-2">
           <span className="text-[11px] font-extrabold px-2 py-0.5 rounded-md"
             style={{ background: hexA(color, "1C"), color }}>
-            {s.icd10}
-          </span>
-          <span className="text-[11px] font-semibold truncate" style={{ color: "var(--ink-faint)" }}>
             {s.specialty_label}
           </span>
         </div>

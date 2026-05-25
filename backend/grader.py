@@ -13,6 +13,8 @@ def grade_session(
     ordered_tests: list[str] | None = None,
     examined: bool = False,
     elapsed_seconds: int = 0,
+    patient_history: str = "",
+    relevant_tests: list[str] | None = None,
 ) -> dict:
     prompt_file = os.path.join(os.path.dirname(__file__), "prompts", f"grader_{language}.txt")
     with open(prompt_file, encoding="utf-8") as f:
@@ -29,6 +31,11 @@ def grade_session(
     mm, ss = divmod(max(0, int(elapsed_seconds)), 60)
     elapsed_str = f"{mm}:{ss:02d}"
 
+    # Anchor data — gives the grader fixed criteria instead of improvising
+    none_label = "—" if language == "ru" else "—"
+    history_str = patient_history.strip() if patient_history else none_label
+    relevant_str = ", ".join(relevant_tests) if relevant_tests else none_label
+
     user_msg = system_prompt.format(
         transcript=transcript,
         correct_diagnosis=correct_diagnosis,
@@ -38,12 +45,15 @@ def grade_session(
         ordered_tests=tests_str,
         examined=examined_str,
         elapsed_time=elapsed_str,
+        patient_history=history_str,
+        relevant_tests=relevant_str,
     )
 
     client = Anthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
     response = client.messages.create(
         model="claude-sonnet-4-6",
         max_tokens=4000,
+        temperature=0.2,
         messages=[{"role": "user", "content": user_msg}],
     )
 

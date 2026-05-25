@@ -133,8 +133,6 @@ src/
   lib/
     api.ts                Typed HTTP client
     clinicalData.ts       Diagnosis options, formulary, exam findings, distractor tests
-Dockerfile                Production image (uvicorn + entrypoint)
-fly.toml                  Fly.io config with persistent volume for SQLite
 ```
 
 ## API
@@ -150,12 +148,6 @@ POST /api/assistant           { messages: [{role, content}], language }
 ```
 
 OpenAPI/Swagger UI: http://localhost:8000/docs
-
-## Deploy
-
-See [docs/DEPLOY.md](docs/DEPLOY.md). Recommended path:
-**Fly.io** for the backend (Dockerfile + persistent volume for SQLite) +
-**Vercel** for the Next.js frontend. ~25 minutes for a first deploy.
 
 ## Disclaimer
 
