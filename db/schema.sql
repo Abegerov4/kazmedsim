@@ -62,3 +62,22 @@ CREATE TABLE IF NOT EXISTS dialog_log (
   message TEXT NOT NULL,
   timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
 );
+
+-- RAG corpus: one row per text chunk extracted from a protocol PDF, plus
+-- its OpenAI text-embedding-3-small vector stored as float32 bytes.
+-- Cosine search is done in Python (numpy) — for <100k rows that is fast
+-- enough and avoids a separate vector store.
+CREATE TABLE IF NOT EXISTS protocol_chunks (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  doc_filename TEXT NOT NULL,
+  doc_title TEXT NOT NULL,
+  doc_hash TEXT NOT NULL,             -- sha256 of source PDF; lets us skip re-ingest
+  page_start INTEGER NOT NULL,
+  page_end INTEGER NOT NULL,
+  chunk_index INTEGER NOT NULL,
+  text TEXT NOT NULL,
+  embedding BLOB NOT NULL,            -- numpy float32, length 1536
+  ingested_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS idx_protocol_chunks_doc  ON protocol_chunks(doc_filename);
+CREATE INDEX IF NOT EXISTS idx_protocol_chunks_hash ON protocol_chunks(doc_hash);

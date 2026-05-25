@@ -64,28 +64,64 @@ EXTRA_PROTOCOLS: dict[str, dict[str, str]] = {
 
 
 def search_medical_protocol(condition: str) -> dict[str, Any]:
-    """Find a clinical protocol matching `condition` (Russian or Kazakh phrase).
+    """Find a clinical protocol matching `condition` (RU / KZ / EN phrase).
 
-    First scans the scenarios DB (49 protocols by ICD-10/disease name), then
-    falls back to a small extra catalog of emergencies.
+    Hybrid retrieval:
+      1. **RAG** — semantic search across the indexed MoH RK protocol PDFs
+         (vector embeddings, see backend/rag.py). Returns the top chunks
+         verbatim with page citations.
+      2. **Scenarios DB** — keyword scan of the 49 scenario rows, used as a
+         fallback when RAG is unavailable or finds nothing relevant.
+      3. **Extra catalog** — small hand-curated emergencies (anaphylaxis,
+         CPR, septic shock, decompensated HF, AKI) not yet in the PDF index.
     """
-    q = (condition or "").strip().lower()
+    q = (condition or "").strip()
     if not q:
         return {"found": False, "message": "Empty query"}
 
-    # Tokenize the query: keep words of length ≥4 (filters out filler like "при", "как")
-    import re
-    tokens = [t for t in re.split(r"[\s,/;.()-]+", q) if len(t) >= 4]
-    # Always also try the full lowercase string as a token (catches multi-word disease names)
-    search_terms = list({*tokens, q})
+    # 1) RAG over real MoH RK protocol PDFs.
+    try:
+        from backend.rag import search_protocols
+        hits = search_protocols(q, k=4, min_score=0.30)
+    except Exception:
+        hits = []
 
-    # 1) Scan scenarios DB — match if ANY token appears in any searchable field
+    if hits:
+        # Group hits by document so the LLM sees coherent excerpts.
+        by_doc: dict[str, list[dict]] = {}
+        for h in hits:
+            by_doc.setdefault(h["doc_title"], []).append(h)
+        top_doc = next(iter(by_doc))
+        top_doc_hits = by_doc[top_doc]
+        return {
+            "found":  True,
+            "source": "rag",
+            "name":   top_doc,
+            "icd10":  "",       # not stored in chunks; the LLM reads it from excerpt text
+            "excerpts": [
+                {
+                    "doc":    h["doc_title"],
+                    "pages":  (f"{h['page_start']}–{h['page_end']}"
+                               if h["page_start"] != h["page_end"]
+                               else str(h["page_start"])),
+                    "score":  h["score"],
+                    "text":   h["text"],
+                }
+                for h in hits
+            ],
+            "citation_format": "Цитируй как: «Протокол МЗ РК — <название>, стр. <pages>»",
+        }
+
+    # 2) Fallback — keyword scan of scenarios DB.
+    import re
+    q_lower = q.lower()
+    tokens = [t for t in re.split(r"[\s,/;.()-]+", q_lower) if len(t) >= 4]
+    search_terms = list({*tokens, q_lower})
     rows = []
     try:
         conn = sqlite3.connect(DB_PATH)
         conn.row_factory = sqlite3.Row
-        clauses = []
-        params: list[str] = []
+        clauses, params = [], []
         for t in search_terms:
             like = f"%{t}%"
             clauses.append(
@@ -95,8 +131,7 @@ def search_medical_protocol(condition: str) -> dict[str, Any]:
             params.extend([like, like, like, like])
         where = " OR ".join(f"({c})" for c in clauses) if clauses else "1=0"
         rows = conn.execute(
-            f"""SELECT icd10, disease_ru, disease_kk, correct_diagnosis_ru, correct_diagnosis_kk,
-                       treatment_protocol_ru, sources
+            f"""SELECT icd10, disease_ru, correct_diagnosis_ru, treatment_protocol_ru, sources
                 FROM scenarios WHERE {where} LIMIT 5""",
             params,
         ).fetchall()
@@ -107,22 +142,26 @@ def search_medical_protocol(condition: str) -> dict[str, Any]:
     if rows:
         r = rows[0]
         return {
-            "found": True,
-            "icd10": r["icd10"],
-            "name": r["disease_ru"],
+            "found":     True,
+            "source":    "scenarios_db",
+            "icd10":     r["icd10"],
+            "name":      r["disease_ru"],
             "diagnosis": r["correct_diagnosis_ru"],
             "treatment": r["treatment_protocol_ru"],
-            "sources": json.loads(r["sources"]) if r["sources"] else [],
+            "sources":   json.loads(r["sources"]) if r["sources"] else [],
         }
 
-    # 2) Extra catalog
+    # 3) Extra catalog of emergencies.
     for key, proto in EXTRA_PROTOCOLS.items():
-        if key in q or any(word in q for word in key.split()):
-            return {"found": True, **proto}
+        if key in q_lower or any(word in q_lower for word in key.split()):
+            return {"found": True, "source": "extra_catalog", **proto}
 
     return {
         "found": False,
-        "message": f"Протокол для «{condition}» не найден в локальном справочнике. Доступны: основные нозологии (J18, I21, K85, A02, и др.), а также неотложные — анафилаксия, СЛР, септический шок, ОДСН, AKI.",
+        "message": (
+            f"Протокол для «{condition}» не найден в RAG-индексе, в БД сценариев и в "
+            "справочнике неотложных состояний. Уточни запрос или укажи МКБ-10."
+        ),
     }
 
 
@@ -377,13 +416,27 @@ TOOL_SCHEMAS: list[dict] = [
         "type": "function",
         "function": {
             "name": "search_medical_protocol",
-            "description": "Найти клинический протокол МЗ РК / ВОЗ по нозологии или симптому. Использовать ВСЕГДА когда студент спрашивает о лечении конкретного заболевания, дозах препаратов, тактике, критериях диагноза.",
+            "description": (
+                "Найти клинический протокол МЗ РК по нозологии, симптому или "
+                "конкретному вопросу. Использовать ВСЕГДА когда студент спрашивает "
+                "о лечении заболевания, дозах препаратов, тактике, критериях "
+                "диагноза или сравнении препаратов. Возвращает релевантные "
+                "выдержки из реальных PDF протоколов МЗ РК с номерами страниц. "
+                "ОБЯЗАТЕЛЬНО цитируй excerpts в ответе и указывай источник "
+                "(название протокола + страница)."
+            ),
             "parameters": {
                 "type": "object",
                 "properties": {
                     "condition": {
                         "type": "string",
-                        "description": "Название болезни/состояния на русском (напр. 'пневмония', 'острый инфаркт миокарда', 'анафилаксия') или код МКБ-10",
+                        "description": (
+                            "Запрос свободной формой — нозология, симптом, "
+                            "вопрос о лечении или код МКБ-10. Чем конкретнее "
+                            "вопрос, тем точнее retrieval (напр. 'антибиотик "
+                            "первой линии при внебольничной пневмонии' лучше "
+                            "чем просто 'пневмония')."
+                        ),
                     },
                 },
                 "required": ["condition"],

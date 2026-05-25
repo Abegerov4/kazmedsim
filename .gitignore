@@ -25,5 +25,9 @@ venv/
 db/*.db
 db/events.jsonl
 
+# RAG source PDFs — too large for git, redistribute separately
+docs/protocols/*.pdf
+docs/protocols/.DS_Store
+
 # OS
 .DS_Store

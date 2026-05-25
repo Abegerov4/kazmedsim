@@ -640,9 +640,10 @@ def _summarize_tool_call(tool_name: str, result: dict, lang: str = "ru") -> dict
     if tool_name == "search_medical_protocol":
         if not result.get("found"):
             return None
-        icd = result.get("icd10", "")
-        name = result.get("name", "")
-        return {"icon": "📋", "label": f"{L['protocol']} {icd} — {name}".strip(" —")}
+        icd = (result.get("icd10") or "").strip()
+        name = (result.get("name") or "").strip()
+        label = f"{L['protocol']}: {name}" if not icd else f"{L['protocol']} {icd} — {name}"
+        return {"icon": "📋", "label": label.strip(" —:")}
 
     if tool_name == "clinical_calculator":
         if "score" in result or "egfr_ml_min_173m2" in result:
