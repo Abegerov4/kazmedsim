@@ -1,14 +1,10 @@
-# Force Nixpacks to treat this repo as a Python service.
-# Without this, Railway sees the root-level package.json and builds the
-# Next.js frontend instead — but the frontend lives on Vercel; Railway
+# Force Nixpacks to use the Python provider on Railway.
+# Without this, the root-level package.json makes Railway build the
+# Next.js frontend instead — but the frontend lives on Vercel, Railway
 # only runs the FastAPI backend.
+#
+# We rely on the Python provider's default behavior: it sees the
+# root-level `requirements.txt` (kept in sync with backend/requirements.txt)
+# and runs `pip install -r requirements.txt` for us. Start command is
+# provided via Procfile.
 providers = ["python"]
-
-[phases.setup]
-nixPkgs = ["python312", "gcc"]
-
-[phases.install]
-cmds = ["pip install --upgrade pip && pip install -r backend/requirements.txt"]
-
-[start]
-cmd = "uvicorn backend.main:app --host 0.0.0.0 --port $PORT"
