@@ -894,7 +894,7 @@ export default function SessionPage() {
                       boxShadow: canFinish ? "0 10px 22px -10px rgba(63,169,140,.7)" : "none",
                     }}
                   >
-                    {ending ? `⏳ ${L.grading}` : L.endConsult}
+                    {ending ? L.grading : L.endConsult}
                   </button>
                 </div>
               )}

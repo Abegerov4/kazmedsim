@@ -191,22 +191,28 @@ function StarIcon({ filled = true, size = 56 }: { filled?: boolean; size?: numbe
 // Grading animation screen
 function GradingScreen({ lang, onDone }: { lang: Lang; onDone: () => void }) {
   const steps = GRADING_STEPS[lang];
-  const [checked, setChecked] = useState<number[]>([]);
-  const [active, setActive] = useState(0);
+  // `done` = how many steps are currently checked (the prefix [0..done-1]).
+  // Storing a single count instead of an array makes a dropped tick impossible:
+  // even if the timer fires irregularly we always derive `checked` from one
+  // monotonic number.
+  const [done, setDone] = useState(0);
+  const checked = Array.from({ length: done }, (_, i) => i);
+  const active = done;
 
   useEffect(() => {
-    let idx = 0;
+    const total = steps.length;
+    let n = 0;
     const tick = () => {
-      if (idx < steps.length) {
-        setChecked(prev => [...prev, idx]);
-        setActive(idx + 1);
-        idx++;
-        setTimeout(tick, idx < steps.length - 1 ? 500 : 900);
+      n += 1;
+      setDone(n);
+      if (n < total) {
+        setTimeout(tick, 500);
       } else {
-        setTimeout(onDone, 600);
+        setTimeout(onDone, 900);
       }
     };
-    setTimeout(tick, 400);
+    const initial = setTimeout(tick, 400);
+    return () => clearTimeout(initial);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
