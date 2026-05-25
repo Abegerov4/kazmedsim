@@ -21,8 +21,9 @@ venv/
 *.egg-info/
 *.egg-info/
 
-# Database (keep schema.sql, ignore binary)
+# Database (keep schema.sql, ignore binary + local-only event log)
 db/*.db
+db/events.jsonl
 
 # OS
 .DS_Store

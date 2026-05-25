@@ -8,6 +8,7 @@ import json
 
 from backend.scenarios import get_scenario, get_all_scenarios
 from backend.grader import grade_session
+from backend.telemetry import record_anthropic, record_openai
 
 load_dotenv(".env.local")
 
@@ -156,13 +157,21 @@ def start_session(req: StartSessionRequest):
             language=_LANG_LABEL[lang],
         )
 
+    import time as _t
     client = Anthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
+    _t0 = _t.time()
     intro = client.messages.create(
         model="claude-sonnet-4-6",
         max_tokens=300,
-        system=system_prompt,
+        # cache_control: subsequent turns of the same session reuse this prompt
+        # (TTL 5 min). If the rendered prompt is below the 1024-token cache
+        # threshold this is a no-op — Anthropic just ignores the marker.
+        system=[{"type": "text", "text": system_prompt,
+                 "cache_control": {"type": "ephemeral"}}],
         messages=[{"role": "user", "content": _OPENING_LINE[lang]}],
     )
+    record_anthropic("patient_start", "claude-sonnet-4-6", intro, _t0,
+                     session_id=session_id, language=lang)
     patient_intro = intro.content[0].text
 
     db.execute(
@@ -203,10 +212,16 @@ def send_message(req: MessageRequest):
             language=_LANG_LABEL[lang],
         )
 
-    messages = []
+    messages: list[dict] = []
     for log in logs:
         role = "assistant" if log["role"] == "patient" else "user"
         messages.append({"role": role, "content": log["message"]})
+    # Mark the latest historical turn as a cache breakpoint — on the NEXT
+    # turn the entire dialog up to that point will be served from cache.
+    if messages:
+        last = messages[-1]
+        last["content"] = [{"type": "text", "text": last["content"],
+                            "cache_control": {"type": "ephemeral"}}]
     messages.append({"role": "user", "content": req.message})
 
     db.execute(
@@ -214,13 +229,19 @@ def send_message(req: MessageRequest):
         (req.session_id, "student", req.message),
     )
 
+    import time as _t
     client = Anthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
+    _t0 = _t.time()
     response = client.messages.create(
         model="claude-sonnet-4-6",
         max_tokens=400,
-        system=system_prompt,
+        system=[{"type": "text", "text": system_prompt,
+                 "cache_control": {"type": "ephemeral"}}],
         messages=messages,
     )
+    record_anthropic("patient_message", "claude-sonnet-4-6", response, _t0,
+                     session_id=req.session_id, language=lang,
+                     turn=len([m for m in messages if m.get("role") == "user"]))
     patient_response = response.content[0].text
 
     db.execute(
@@ -404,13 +425,18 @@ def voice_token(req: VoiceTokenRequest):
 
     # Generate the patient's opening line ahead of time so the worker can
     # speak it the moment it joins (no awkward silence on connect).
+    import time as _t
     client = Anthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
+    _t0 = _t.time()
     intro = client.messages.create(
         model="claude-haiku-4-5-20251001",
         max_tokens=200,
-        system=system_prompt,
+        system=[{"type": "text", "text": system_prompt,
+                 "cache_control": {"type": "ephemeral"}}],
         messages=[{"role": "user", "content": _OPENING_LINE[lang]}],
     )
+    record_anthropic("voice_intro", "claude-haiku-4-5-20251001", intro, _t0,
+                     language=lang)
     initial_line = intro.content[0].text
 
     # Create a session row so the dialog log + grader still works for voice
@@ -520,8 +546,10 @@ def assistant(req: AssistantRequest):
     tools_used: list[dict] = []
 
     MAX_TOOL_ITERATIONS = 4
+    import time as _t
     try:
-        for _ in range(MAX_TOOL_ITERATIONS):
+        for _iter in range(MAX_TOOL_ITERATIONS):
+            _t0 = _t.time()
             response = client.chat.completions.create(
                 model="gpt-4o-mini",
                 max_tokens=900,
@@ -529,6 +557,8 @@ def assistant(req: AssistantRequest):
                 messages=messages,
                 tools=TOOL_SCHEMAS,
             )
+            record_openai("assistant", "gpt-4o-mini", response, _t0,
+                          language=lang, iteration=_iter)
             msg = response.choices[0].message
             if not msg.tool_calls:
                 return {"reply": msg.content or "", "tools_used": tools_used}
@@ -568,12 +598,15 @@ def assistant(req: AssistantRequest):
                 })
 
         # Exceeded iterations — ask for a plain reply without tools
+        _t0 = _t.time()
         final = client.chat.completions.create(
             model="gpt-4o-mini",
             max_tokens=600,
             temperature=0.3,
             messages=messages,
         )
+        record_openai("assistant_final", "gpt-4o-mini", final, _t0,
+                      language=lang)
         return {"reply": final.choices[0].message.content or "", "tools_used": tools_used}
 
     except Exception as e:

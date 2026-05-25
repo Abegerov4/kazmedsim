@@ -9,7 +9,14 @@ Why tool-use instead of regex parsing:
     Anthropic API validates against our schema, so parsing is bulletproof.
 """
 import os
+import time
 from anthropic import Anthropic
+
+from backend.telemetry import record_anthropic
+
+# Marker that splits each grader_*.txt into a STATIC top half (rubric rules +
+# format spec — cached) and a DYNAMIC bottom half (transcript + anchors).
+CASE_MARKER = "[CASE]"
 
 
 # ── Tool schema ──────────────────────────────────────────────────────────────
@@ -140,7 +147,12 @@ def grade_session(
 ) -> dict:
     prompt_file = os.path.join(os.path.dirname(__file__), "prompts", f"grader_{language}.txt")
     with open(prompt_file, encoding="utf-8") as f:
-        system_prompt = f.read()
+        raw = f.read()
+    # Static top (rules + format) and dynamic bottom (transcript + anchors)
+    if CASE_MARKER in raw:
+        static_part, dynamic_template = raw.split(CASE_MARKER, 1)
+    else:
+        static_part, dynamic_template = "", raw
 
     none_assigned = {"ru": "не назначались", "kk": "тағайындалмады", "en": "not ordered"}
     yes_no = {
@@ -167,7 +179,7 @@ def grade_session(
     history_str = patient_history.strip() if patient_history else none_label
     relevant_str = ", ".join(relevant_tests) if relevant_tests else none_label
 
-    user_msg = system_prompt.format(
+    dynamic_msg = dynamic_template.format(
         transcript=transcript,
         correct_diagnosis=correct_diagnosis,
         student_diagnosis=student_diagnosis,
@@ -180,8 +192,8 @@ def grade_session(
         relevant_tests=relevant_str,
     )
 
-    # Append a hard instruction to call the tool — robust across languages.
-    user_msg += (
+    # Hard tool-call instruction (language-agnostic, appended to dynamic msg).
+    dynamic_msg += (
         "\n\n---\n"
         "Call the `submit_grade` tool with the final scores and feedback. "
         "Write `summary`, `*_done`, `*_improve`, and `recommendation` in the "
@@ -189,15 +201,27 @@ def grade_session(
         "Do not respond with prose — only call the tool."
     )
 
+    # Two content blocks: static (cached, identical across calls in the same
+    # language) and dynamic (per-call case data). Anthropic caches the prefix
+    # up to and including the block marked with cache_control.
+    user_content = [
+        {"type": "text", "text": static_part.strip(),
+         "cache_control": {"type": "ephemeral"}},
+        {"type": "text", "text": dynamic_msg},
+    ]
+
     client = Anthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
+    t0 = time.time()
     response = client.messages.create(
         model="claude-sonnet-4-6",
         max_tokens=4000,
         temperature=0.2,
         tools=[GRADE_TOOL],
         tool_choice={"type": "tool", "name": "submit_grade"},
-        messages=[{"role": "user", "content": user_msg}],
+        messages=[{"role": "user", "content": user_content}],
     )
+    record_anthropic("grader", "claude-sonnet-4-6", response, t0,
+                     language=language)
 
     # Find the tool_use block (Anthropic guarantees it when tool_choice is
     # forced, but we still defend against an unexpected text-only reply).
