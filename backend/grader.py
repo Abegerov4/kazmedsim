@@ -1,8 +1,130 @@
+"""Session grader — uses Anthropic tool-use for structured output.
+
+Why tool-use instead of regex parsing:
+    Free-form markdown output drifts (rubric headers rename across languages,
+    score formatting changes "8/10" → "8 из 10" → "8 баллов") and the regex
+    that used to extract scores broke every time we touched the prompt.
+
+    With a forced tool call, Claude must return a typed JSON object that the
+    Anthropic API validates against our schema, so parsing is bulletproof.
+"""
 import os
-import json
-import re
 from anthropic import Anthropic
 
+
+# ── Tool schema ──────────────────────────────────────────────────────────────
+
+# Each rubric returns three keys: score 0-10, "what went well", "what to
+# improve". The grader's free-form Summary + Recommendation are top-level.
+# We don't constrain language here — the grader prompt instructs Claude which
+# language to write the prose in (ru | kk | en).
+
+GRADE_TOOL = {
+    "name": "submit_grade",
+    "description": (
+        "Submit the final rubric grades and feedback for the student's "
+        "simulated appointment. Always call this tool exactly once."
+    ),
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "summary":               {"type": "string"},
+            "anamnesis_score":       {"type": "integer", "minimum": 0, "maximum": 10},
+            "anamnesis_done":        {"type": "string"},
+            "anamnesis_improve":     {"type": "string"},
+            "communication_score":   {"type": "integer", "minimum": 0, "maximum": 10},
+            "communication_done":    {"type": "string"},
+            "communication_improve": {"type": "string"},
+            "reasoning_score":       {"type": "integer", "minimum": 0, "maximum": 10},
+            "reasoning_done":        {"type": "string"},
+            "reasoning_improve":     {"type": "string"},
+            "diagnosis_score":       {"type": "integer", "minimum": 0, "maximum": 10},
+            "diagnosis_done":        {"type": "string"},
+            "diagnosis_improve":     {"type": "string"},
+            "treatment_score":       {"type": "integer", "minimum": 0, "maximum": 10},
+            "treatment_done":        {"type": "string"},
+            "treatment_improve":     {"type": "string"},
+            "recommendation":        {"type": "string"},
+        },
+        "required": [
+            "summary",
+            "anamnesis_score", "anamnesis_done", "anamnesis_improve",
+            "communication_score", "communication_done", "communication_improve",
+            "reasoning_score", "reasoning_done", "reasoning_improve",
+            "diagnosis_score", "diagnosis_done", "diagnosis_improve",
+            "treatment_score", "treatment_done", "treatment_improve",
+            "recommendation",
+        ],
+    },
+}
+
+
+_FEEDBACK_HEADERS = {
+    "ru": {
+        "summary":    "## Итог",
+        "rubrics":    "## По рубрикам",
+        "anamnesis":  "1. Сбор анамнеза",
+        "communication": "2. Общение с пациентом",
+        "reasoning":  "3. Клиническое мышление",
+        "diagnosis":  "4. Точность диагноза",
+        "treatment":  "5. Адекватность лечения",
+        "done":       "Удалось",
+        "improve":    "Улучшить",
+        "rec":        "## Рекомендация",
+    },
+    "kk": {
+        "summary":    "## Қорытынды",
+        "rubrics":    "## Рубрикалар бойынша",
+        "anamnesis":  "1. Анамнез жинау",
+        "communication": "2. Науқаспен қарым-қатынас",
+        "reasoning":  "3. Клиникалық ойлау",
+        "diagnosis":  "4. Диагноздың дәлдігі",
+        "treatment":  "5. Емнің адекваттылығы",
+        "done":       "Сәтті",
+        "improve":    "Жақсарту",
+        "rec":        "## Ұсыныс",
+    },
+    "en": {
+        "summary":    "## Summary",
+        "rubrics":    "## By rubric",
+        "anamnesis":  "1. History taking",
+        "communication": "2. Communication",
+        "reasoning":  "3. Clinical reasoning",
+        "diagnosis":  "4. Diagnostic accuracy",
+        "treatment":  "5. Treatment adequacy",
+        "done":       "Done well",
+        "improve":    "Improve",
+        "rec":        "## Recommendation",
+    },
+}
+
+
+def _render_feedback(data: dict, language: str) -> str:
+    """Render the tool-output JSON back into the markdown the UI already shows.
+
+    Kept identical in shape to the previous free-form output so the
+    /session/[id]/grade page renders unchanged.
+    """
+    L = _FEEDBACK_HEADERS.get(language, _FEEDBACK_HEADERS["ru"])
+    sections = [
+        L["summary"],
+        data["summary"].strip(),
+        "",
+        L["rubrics"],
+    ]
+    for key in ("anamnesis", "communication", "reasoning", "diagnosis", "treatment"):
+        score = data[f"{key}_score"]
+        sections.append("")
+        sections.append(f"**{L[key]} — {score}/10**")
+        sections.append(f"**{L['done']}:** {data[f'{key}_done'].strip()}")
+        sections.append(f"**{L['improve']}:** {data[f'{key}_improve'].strip()}")
+    sections.append("")
+    sections.append(L["rec"])
+    sections.append(data["recommendation"].strip())
+    return "\n".join(sections)
+
+
+# ── Public API ───────────────────────────────────────────────────────────────
 
 def grade_session(
     transcript: str,
@@ -41,7 +163,6 @@ def grade_session(
     mm, ss = divmod(max(0, int(elapsed_seconds)), 60)
     elapsed_str = f"{mm}:{ss:02d}"
 
-    # Anchor data — gives the grader fixed criteria instead of improvising
     none_label = "—"
     history_str = patient_history.strip() if patient_history else none_label
     relevant_str = ", ".join(relevant_tests) if relevant_tests else none_label
@@ -59,35 +180,52 @@ def grade_session(
         relevant_tests=relevant_str,
     )
 
+    # Append a hard instruction to call the tool — robust across languages.
+    user_msg += (
+        "\n\n---\n"
+        "Call the `submit_grade` tool with the final scores and feedback. "
+        "Write `summary`, `*_done`, `*_improve`, and `recommendation` in the "
+        f"language: {lang_label.get(language, lang_label['ru'])}. "
+        "Do not respond with prose — only call the tool."
+    )
+
     client = Anthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
     response = client.messages.create(
         model="claude-sonnet-4-6",
         max_tokens=4000,
         temperature=0.2,
+        tools=[GRADE_TOOL],
+        tool_choice={"type": "tool", "name": "submit_grade"},
         messages=[{"role": "user", "content": user_msg}],
     )
 
-    raw = response.content[0].text
-    return _parse_grade(raw)
+    # Find the tool_use block (Anthropic guarantees it when tool_choice is
+    # forced, but we still defend against an unexpected text-only reply).
+    data = None
+    for block in response.content:
+        if getattr(block, "type", None) == "tool_use" and block.name == "submit_grade":
+            data = block.input
+            break
+    if data is None:
+        # Extremely defensive fallback: return mid scores so the UI doesn't break
+        data = {
+            "summary": "Grader output unavailable.",
+            "anamnesis_score": 5, "anamnesis_done": "—", "anamnesis_improve": "—",
+            "communication_score": 5, "communication_done": "—", "communication_improve": "—",
+            "reasoning_score": 5, "reasoning_done": "—", "reasoning_improve": "—",
+            "diagnosis_score": 5, "diagnosis_done": "—", "diagnosis_improve": "—",
+            "treatment_score": 5, "treatment_done": "—", "treatment_improve": "—",
+            "recommendation": "—",
+        }
 
-
-def _parse_grade(text: str) -> dict:
     scores = {
-        "anamnesis":     _extract_score(text, r"(?:анамнез|history\s*taking|history|anamnez|1)[^\d]*(\d+(?:\.\d+)?)\s*/?\s*10", 5.0),
-        "communication": _extract_score(text, r"(?:общени|қарым|communication|2)[^\d]*(\d+(?:\.\d+)?)\s*/?\s*10", 5.0),
-        "reasoning":     _extract_score(text, r"(?:мышлени|ойлау|reasoning|3)[^\d]*(\d+(?:\.\d+)?)\s*/?\s*10", 5.0),
-        "diagnosis":     _extract_score(text, r"(?:диагноз|diagnostic\s*accuracy|diagnosis|4)[^\d]*(\d+(?:\.\d+)?)\s*/?\s*10", 5.0),
-        "treatment":     _extract_score(text, r"(?:лечени|treatment|ем\s|5)[^\d]*(\d+(?:\.\d+)?)\s*/?\s*10", 5.0),
+        "anamnesis":     float(data["anamnesis_score"]),
+        "communication": float(data["communication_score"]),
+        "reasoning":     float(data["reasoning_score"]),
+        "diagnosis":     float(data["diagnosis_score"]),
+        "treatment":     float(data["treatment_score"]),
     }
     total = round(sum(scores.values()) / len(scores), 1)
-    return {"scores": scores, "total": total, "feedback": text}
+    feedback = _render_feedback(data, language)
 
-
-def _extract_score(text: str, pattern: str, default: float) -> float:
-    m = re.search(pattern, text, re.IGNORECASE)
-    if m:
-        try:
-            return float(m.group(1))
-        except ValueError:
-            pass
-    return default
+    return {"scores": scores, "total": total, "feedback": feedback, "raw": data}
