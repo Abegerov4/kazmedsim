@@ -7,7 +7,7 @@ import { DIAGNOSIS_OPTIONS, FORMULARY, FORMULARY_CATEGORIES, EXAM_DATA, VITALS_M
 import { MedIcon } from "@/components/MedIcon";
 import { VoiceMode } from "@/components/VoiceMode";
 
-type Lang = "ru" | "kk";
+type Lang = "ru" | "kk" | "en";
 
 const LABELS = {
   ru: {
@@ -91,6 +91,47 @@ const LABELS = {
     timer: "Қабылдау",
     overtime: "Уақыттан асу",
     timeUp: "Уақыт бітті — қабылдауды аяқтаңыз",
+  },
+  en: {
+    back: "← Queue",
+    age: "yrs", genderM: "M", genderF: "F",
+    complaint: "Complaint",
+    labs: "Labs",
+    diagnosis: "Diagnosis",
+    treatment: "Treatment",
+    finish: "Finish appointment",
+    pickDiagnosis: "Pick the most likely diagnosis",
+    pickTreatment: "Prescribe treatment from the formulary",
+    allCat: "All",
+    selectedMeds: "Ordered",
+    noMedsHint: "Pick drugs below",
+    needBoth: "Pick a diagnosis and at least one drug",
+    placeholder: "Ask the patient...",
+    send: "Send",
+    thinking: "REPLYING...",
+    listening: "LISTENING...",
+    grading: "Grading...",
+    loading: "...",
+    labsTitle: "Lab results",
+    normal: "Normal",
+    close: "Close",
+    record: "Patient record",
+    examine: "Exam",
+    endConsult: "End consultation →",
+    vitalsTitle: "Vital signs",
+    examFindings: "Examination findings",
+    inspectionL: "Inspection",
+    auscultationL: "Auscultation",
+    palpationL: "Palpation",
+    percussionL: "Percussion",
+    pickTests: "Order tests",
+    relevantTests: "Available tests",
+    extraTests: "Additional tests",
+    noDeviation: "No abnormality",
+    ordered: "Ordered",
+    timer: "Visit",
+    overtime: "Overtime",
+    timeUp: "Time's up — finish the appointment",
   },
 };
 
@@ -272,9 +313,11 @@ function PatientOnChair({ name, gender, thinking }: { name: string; gender: stri
 }
 
 // Speech bubble
-function SpeechBubble({ text, status }: { text: string; status: "listening" | "thinking" | "idle" }) {
+function SpeechBubble({ text, status, lang }: { text: string; status: "listening" | "thinking" | "idle"; lang: Lang }) {
   const thinking = status === "thinking";
   const borderColor = thinking ? "#E0A82E" : "#1B7A8F";
+  const replyingLabel = lang === "ru" ? "ОТВЕЧАЕТ" : lang === "kk" ? "ЖАУАП БЕРУДЕ" : "REPLYING";
+  const listeningLabel = lang === "ru" ? "СЛУШАЕТ ВАС" : lang === "kk" ? "СІЗДІ ТЫҢДАУДА" : "LISTENING";
 
   return (
     <div
@@ -289,7 +332,7 @@ function SpeechBubble({ text, status }: { text: string; status: "listening" | "t
       {thinking ? (
         <div className="flex items-center gap-2.5">
           <span style={{ color: "#B8861C", fontWeight: 800, fontSize: 11, letterSpacing: ".06em" }}>
-            ОТВЕЧАЕТ
+            {replyingLabel}
           </span>
           <span className="flex gap-1">
             {[0, 1, 2].map((i) => (
@@ -303,7 +346,7 @@ function SpeechBubble({ text, status }: { text: string; status: "listening" | "t
           {status === "listening" && (
             <span className="text-[10px] font-extrabold block mb-1.5 tracking-wider"
               style={{ color: "#1B7A8F" }}>
-              ● СЛУШАЕТ ВАС
+              ● {listeningLabel}
             </span>
           )}
           <div
@@ -525,7 +568,7 @@ export default function SessionPage() {
         {/* Speech bubble */}
         <div className="mb-4 pointer-events-auto shrink-0" style={{ maxWidth: 380 }}>
           {(thinking || lastPatientMsg) && (
-            <SpeechBubble text={lastPatientMsg} status={bubbleStatus} />
+            <SpeechBubble text={lastPatientMsg} status={bubbleStatus} lang={lang} />
           )}
         </div>
 
@@ -587,10 +630,17 @@ export default function SessionPage() {
               {rightPanel === "record" && (
                 <div className="space-y-3">
                   <div className="p-4 rounded-2xl" style={{ background: "rgba(52,169,188,0.14)", border: "1px solid rgba(52,169,188,0.28)" }}>
-                    <p className="text-[10px] font-extrabold mb-1 tracking-wider" style={{ color: "#7C94A0" }}>ПАЦИЕНТ</p>
+                    <p className="text-[10px] font-extrabold mb-1 tracking-wider" style={{ color: "#7C94A0" }}>
+                      {lang === "ru" ? "ПАЦИЕНТ" : lang === "kk" ? "НАУҚАС" : "PATIENT"}
+                    </p>
                     <p className="font-extrabold text-sm" style={{ color: "#EAF6F7" }}>{scenario.patient_name}</p>
                     <p className="text-xs mt-1 font-semibold" style={{ color: "#9FE0E8" }}>
-                      {scenario.patient_age} {L.age} · {scenario.patient_gender === "female" ? "Женский" : "Мужской"}
+                      {scenario.patient_age} {L.age} · {(() => {
+                        const isF = scenario.patient_gender === "female";
+                        return lang === "ru" ? (isF ? "Женский" : "Мужской")
+                          : lang === "kk" ? (isF ? "Әйел" : "Ер")
+                          : (isF ? "Female" : "Male");
+                      })()}
                     </p>
                   </div>
                   <div className="p-4 rounded-2xl" style={{ background: "rgba(255,255,255,0.045)", border: "1px solid rgba(255,255,255,0.08)" }}>
@@ -598,7 +648,9 @@ export default function SessionPage() {
                     <p className="text-sm leading-relaxed" style={{ color: "#D6ECEE" }}>{scenario.chief_complaint}</p>
                   </div>
                   <div className="p-4 rounded-2xl" style={{ background: "rgba(255,255,255,0.045)", border: "1px solid rgba(255,255,255,0.08)" }}>
-                    <p className="text-[10px] font-extrabold mb-2 tracking-wider" style={{ color: "#7C94A0" }}>ИСТОРИЯ ДИАЛОГА</p>
+                    <p className="text-[10px] font-extrabold mb-2 tracking-wider" style={{ color: "#7C94A0" }}>
+                      {lang === "ru" ? "ИСТОРИЯ ДИАЛОГА" : lang === "kk" ? "СҰХБАТ ТАРИХЫ" : "DIALOG HISTORY"}
+                    </p>
                     <div className="space-y-2 max-h-64 overflow-y-auto">
                       {messages.map((m, i) => (
                         <div key={i} className={`text-xs p-2.5 rounded-xl ${m.role === "patient" ? "" : "ml-4"}`}
@@ -890,10 +942,10 @@ export default function SessionPage() {
           />
 
           {(() => {
-            const voiceAvailable = lang === "ru";
+            const voiceAvailable = lang !== "kk";
             const micTitle = voiceAvailable
-              ? "Голосовой режим"
-              : "Голосовой режим доступен только на русском · Дауыстық режим тек орыс тілінде қолжетімді";
+              ? (lang === "ru" ? "Голосовой режим" : lang === "en" ? "Voice mode" : "Дауыстық режим")
+              : "Дауыстық режим қазақ тілінде қолжетімсіз · Voice mode is not available in Kazakh";
             return (
               <button
                 onClick={() => voiceAvailable && setVoiceMode(true)}
@@ -938,7 +990,7 @@ export default function SessionPage() {
           )}
           {lang === "kk" && (
             <span className="text-[10.5px] font-semibold tracking-wide" style={{ color: "#7C94A0" }}>
-              🎤 Дауыстық режим тек орыс тілінде · Голос только на русском
+              🎤 Дауыстық режим қазақ тілінде қолжетімсіз · Voice mode unavailable in Kazakh
             </span>
           )}
         </div>

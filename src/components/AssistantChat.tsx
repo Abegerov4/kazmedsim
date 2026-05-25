@@ -5,7 +5,7 @@ import ReactMarkdown from "react-markdown";
 import { askAssistant, type AssistantMsg } from "@/lib/api";
 import { MedIcon } from "@/components/MedIcon";
 
-type Lang = "ru" | "kk";
+type Lang = "ru" | "kk" | "en";
 
 const LABELS = {
   ru: {
@@ -36,6 +36,21 @@ const LABELS = {
       "Кеуденің жедел ауырсынуындағы дифдиагноз",
       "Аурухана сыртылық пневмониядағы бірінші қатардағы антибиотик",
       "Жоғары СРБ-ны қалай түсіндіру керек?",
+    ],
+  },
+  en: {
+    open: "AI assistant",
+    title: "AI consultant",
+    subtitle: "Medical assistant",
+    welcome: "Hi! I'm a medical AI consultant. Ask about diagnostics, treatment, drugs, and clinical protocols.",
+    placeholder: "Ask about medicine…",
+    typing: "Consultant typing…",
+    error: "Couldn't get a response. Please try again.",
+    disclaimer: "Reference for learning · based on MoH RK, WHO, NICE",
+    suggestions: [
+      "Differential for acute chest pain",
+      "First-line antibiotic for community-acquired pneumonia",
+      "How to interpret an elevated CRP?",
     ],
   },
 };

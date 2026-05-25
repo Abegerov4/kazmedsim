@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 
-type Lang = "ru" | "kk";
+type Lang = "ru" | "kk" | "en";
 
 const LABELS = {
   ru: {
@@ -14,7 +14,7 @@ const LABELS = {
     start: "Начать приём",
     demoBadge: "ДЕМО-ВЕРСИЯ",
     disclaimer: "Демо-проект · не аффилирован с МЗ РК · только для обучения",
-    features: ["Реальные случаи", "Разбор по 5 критериям", "Русский · Қазақша"],
+    features: ["Реальные случаи", "Разбор по 5 критериям", "Русский · Қазақша · English"],
   },
   kk: {
     tagline: "Қазақстан емханасының симуляторы",
@@ -24,7 +24,17 @@ const LABELS = {
     start: "Қабылдауды бастау",
     demoBadge: "ДЕМО-НҰСҚА",
     disclaimer: "Демо-жоба · ҚР ДСМ-мен ресми байланыссыз · тек оқуға арналған",
-    features: ["Нақты жағдайлар", "5 өлшем бойынша талдау", "Русский · Қазақша"],
+    features: ["Нақты жағдайлар", "5 өлшем бойынша талдау", "Русский · Қазақша · English"],
+  },
+  en: {
+    tagline: "Kazakhstan polyclinic simulator",
+    sub: "Practice clinical encounters — with no risk to the patient.",
+    namePlaceholder: "Your name",
+    nameHint: "This is how the debriefing system will address you",
+    start: "Start appointment",
+    demoBadge: "DEMO VERSION",
+    disclaimer: "Demo project · not affiliated with MoH RK · for education only",
+    features: ["Real cases", "5-criterion debrief", "Русский · Қазақша · English"],
   },
 };
 
@@ -95,14 +105,14 @@ export default function HomePage() {
       {/* Language switcher */}
       <div className="absolute top-5 right-5 flex gap-1 p-1 rounded-xl"
         style={{ background: "var(--surface)", boxShadow: "var(--shadow-sm)", border: "1px solid var(--border-soft)" }}>
-        {(["ru", "kk"] as Lang[]).map((l) => (
+        {(["ru", "kk", "en"] as Lang[]).map((l) => (
           <button key={l} onClick={() => setLang(l)}
             className="px-3 py-1.5 rounded-lg text-xs font-extrabold transition-all"
             style={{
               background: lang === l ? "var(--primary)" : "transparent",
               color: lang === l ? "#fff" : "var(--ink-soft)",
             }}>
-            {l === "ru" ? "RU" : "KZ"}
+            {l === "ru" ? "RU" : l === "kk" ? "KZ" : "EN"}
           </button>
         ))}
       </div>

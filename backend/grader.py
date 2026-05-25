@@ -20,19 +20,29 @@ def grade_session(
     with open(prompt_file, encoding="utf-8") as f:
         system_prompt = f.read()
 
+    none_assigned = {"ru": "не назначались", "kk": "тағайындалмады", "en": "not ordered"}
+    yes_no = {
+        "ru": ("да", "нет"),
+        "kk": ("иә", "жоқ"),
+        "en": ("yes", "no"),
+    }
+    lang_label = {
+        "ru": "русском",
+        "kk": "қазақ тілінде",
+        "en": "English",
+    }
+
     if ordered_tests:
         tests_str = ", ".join(ordered_tests)
     else:
-        tests_str = "не назначались" if language == "ru" else "тағайындалмады"
-    examined_str = (
-        ("да" if examined else "нет") if language == "ru"
-        else ("иә" if examined else "жоқ")
-    )
+        tests_str = none_assigned.get(language, none_assigned["ru"])
+    y, n = yes_no.get(language, yes_no["ru"])
+    examined_str = y if examined else n
     mm, ss = divmod(max(0, int(elapsed_seconds)), 60)
     elapsed_str = f"{mm}:{ss:02d}"
 
     # Anchor data — gives the grader fixed criteria instead of improvising
-    none_label = "—" if language == "ru" else "—"
+    none_label = "—"
     history_str = patient_history.strip() if patient_history else none_label
     relevant_str = ", ".join(relevant_tests) if relevant_tests else none_label
 
@@ -41,7 +51,7 @@ def grade_session(
         correct_diagnosis=correct_diagnosis,
         student_diagnosis=student_diagnosis,
         student_treatment=student_treatment,
-        language="русском" if language == "ru" else "қазақ тілінде",
+        language=lang_label.get(language, lang_label["ru"]),
         ordered_tests=tests_str,
         examined=examined_str,
         elapsed_time=elapsed_str,
@@ -63,11 +73,11 @@ def grade_session(
 
 def _parse_grade(text: str) -> dict:
     scores = {
-        "anamnesis": _extract_score(text, r"(?:анамнез|anamnesis|1)[^\d]*(\d+(?:\.\d+)?)\s*/?\s*10", 5.0),
-        "communication": _extract_score(text, r"(?:общени|communication|2)[^\d]*(\d+(?:\.\d+)?)\s*/?\s*10", 5.0),
-        "reasoning": _extract_score(text, r"(?:мышлени|reasoning|3)[^\d]*(\d+(?:\.\d+)?)\s*/?\s*10", 5.0),
-        "diagnosis": _extract_score(text, r"(?:диагноз|diagnosis|4)[^\d]*(\d+(?:\.\d+)?)\s*/?\s*10", 5.0),
-        "treatment": _extract_score(text, r"(?:лечени|treatment|5)[^\d]*(\d+(?:\.\d+)?)\s*/?\s*10", 5.0),
+        "anamnesis":     _extract_score(text, r"(?:анамнез|history\s*taking|history|anamnez|1)[^\d]*(\d+(?:\.\d+)?)\s*/?\s*10", 5.0),
+        "communication": _extract_score(text, r"(?:общени|қарым|communication|2)[^\d]*(\d+(?:\.\d+)?)\s*/?\s*10", 5.0),
+        "reasoning":     _extract_score(text, r"(?:мышлени|ойлау|reasoning|3)[^\d]*(\d+(?:\.\d+)?)\s*/?\s*10", 5.0),
+        "diagnosis":     _extract_score(text, r"(?:диагноз|diagnostic\s*accuracy|diagnosis|4)[^\d]*(\d+(?:\.\d+)?)\s*/?\s*10", 5.0),
+        "treatment":     _extract_score(text, r"(?:лечени|treatment|ем\s|5)[^\d]*(\d+(?:\.\d+)?)\s*/?\s*10", 5.0),
     }
     total = round(sum(scores.values()) / len(scores), 1)
     return {"scores": scores, "total": total, "feedback": text}

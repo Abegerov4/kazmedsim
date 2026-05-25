@@ -39,26 +39,34 @@ def get_all_scenarios(language: str = "ru", difficulty: Optional[str] = None, sp
 
 
 def _localize(row: dict, language: str, public_only: bool = False) -> dict:
-    suffix = "_ru" if language == "ru" else "_kk"
+    suffix = {"ru": "_ru", "kk": "_kk", "en": "_en"}.get(language, "_ru")
+
+    def loc(field: str) -> str:
+        """Pick localized field, falling back to Russian if EN was never filled."""
+        val = row.get(f"{field}{suffix}")
+        if val:
+            return val
+        return row.get(f"{field}_ru", "")
+
     data = {
         "id": row["id"],
         "slug": row["slug"],
         "specialty": row.get("specialty", "internal_medicine"),
-        "specialty_label": row.get(f"specialty_{language}", row.get("specialty_ru", "")),
+        "specialty_label": loc("specialty"),
         "icd10": row.get("icd10", ""),
         "card_color": row.get("card_color", "#FFFFFF"),
         "urgency": row.get("urgency", "routine"),
         "difficulty": row["difficulty"],
-        "disease": row[f"disease{suffix}"],
-        "patient_name": row[f"patient_name{suffix}"],
+        "disease": loc("disease"),
+        "patient_name": loc("patient_name"),
         "patient_age": row["patient_age"],
         "patient_gender": row["patient_gender"],
-        "chief_complaint": row[f"chief_complaint{suffix}"],
-        "history": row[f"history{suffix}"],
-        "allergies": row[f"allergies{suffix}"],
+        "chief_complaint": loc("chief_complaint"),
+        "history": loc("history"),
+        "allergies": loc("allergies"),
         "lab_results_json": row["lab_results_json"],
-        "correct_diagnosis": row[f"correct_diagnosis{suffix}"],
-        "treatment_protocol": row[f"treatment_protocol{suffix}"],
+        "correct_diagnosis": loc("correct_diagnosis"),
+        "treatment_protocol": loc("treatment_protocol"),
         "sources": json.loads(row["sources"]) if row["sources"] else [],
     }
     if public_only:

@@ -1,8 +1,8 @@
 # KazMedSim
 
-A browser-based clinical simulator for Kazakh medical students. Bilingual
-(Russian / Kazakh), tool-using AI agents, 49 protocol-driven scenarios across
-seven specialties.
+A browser-based clinical simulator for Kazakh medical students. Trilingual
+(Russian / Kazakh / English), tool-using AI agents, 49 protocol-driven
+scenarios across seven specialties.
 
 Students chat with a virtual patient, conduct physical exam, order labs,
 choose diagnosis and treatment from a formulary, and receive a structured
@@ -26,7 +26,9 @@ debrief from an AI mentor.
 - **AI medical assistant** with tool use (see below)
 - **Structured grading** — 5 rubrics (anamnesis / communication / reasoning /
   diagnosis / treatment), each 0–10, with bilingual feedback
-- **Bilingual** — every label, prompt and grader output exists in `ru` and `kk`
+- **Trilingual** — every label, prompt, scenario, and grader output exists in
+  `ru`, `kk`, and `en` (voice mode supports `ru` and `en`; Kazakh is
+  text-only since Cartesia has no native Kazakh voices)
 
 ## AI Agent (tool use)
 
@@ -98,7 +100,7 @@ Open http://localhost:3000.
 
 ## User flow
 
-1. **Home** — pick language (RU/KK), enter student name, start session
+1. **Home** — pick language (RU/KK/EN), enter student name, start session
 2. **Intro** — 3 onboarding screens explaining the simulator
 3. **Patients** — browse scenarios filtered by specialty; floating AI
    assistant chat available for questions
@@ -116,7 +118,7 @@ backend/                FastAPI app
   scenarios.py            DB access for scenarios
   grader.py               LLM grading logic
   assistant_tools.py      3 tools + OpenAI schemas for the agent
-  prompts/                System prompts: patient/grader/assistant × ru/kk
+  prompts/                System prompts: patient/grader/assistant × ru/kk/en
 db/
   schema.sql              Tables: scenarios, sessions, dialog_log
   kazmedsim.db            SQLite (gitignored)
@@ -124,9 +126,11 @@ docs/
   DEPLOY.md               Step-by-step Fly.io + Vercel deploy guide
 public/labs/              X-ray and ECG images shown alongside lab results
 scripts/
-  seed_db.py              Base scenarios
-  seed_scenarios_v2.py    Additional 35 scenarios (idempotent)
-  entrypoint.sh           Docker entrypoint — inits schema + seeds on volume
+  seed_db.py                  Base scenarios
+  seed_scenarios_v2.py        Additional 35 scenarios (idempotent)
+  translate_labs_kk.py        Batch-translate descriptive lab values to Kazakh
+  translate_to_en.py          Batch-translate scenarios + labs to English
+  translate_clinical_data_en.py  Inject EN strings into src/lib/clinicalData.ts
 src/
   app/                    Next.js App Router pages (intro, patients, session, grade)
   components/             AssistantChat, PatientCard, MedIcon (SVG icon set)

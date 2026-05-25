@@ -7,7 +7,7 @@ import { PatientCard, type PatientScenario } from "@/components/PatientCard";
 import { MedIcon } from "@/components/MedIcon";
 import { AssistantChat } from "@/components/AssistantChat";
 
-type Lang = "ru" | "kk";
+type Lang = "ru" | "kk" | "en";
 
 const LABELS = {
   ru: {
@@ -28,18 +28,27 @@ const LABELS = {
     cases: "жағдай",
     empty: "Науқастар жоқ",
   },
+  en: {
+    title: "Choose a patient",
+    subtitle: "Cases grouped by specialty",
+    random: "Random",
+    back: "Back",
+    loading: "Loading patients…",
+    cases: "cases",
+    empty: "No patients",
+  },
 };
 
 const SPECIALTIES = [
-  { slug: "all",               icon: "clinic",       ru: "Все",                  kk: "Барлығы" },
-  { slug: "urgent",            icon: "urgent",       ru: "Срочные",              kk: "Шұғыл" },
-  { slug: "internal_medicine", icon: "therapy",      ru: "Терапия",              kk: "Терапия" },
-  { slug: "cardiology",        icon: "cardiology",   ru: "Кардиология",          kk: "Кардиология" },
-  { slug: "pulmonology",       icon: "pulmonology",  ru: "Пульмонология",        kk: "Пульмонология" },
-  { slug: "neurology",         icon: "neurology",    ru: "Неврология",           kk: "Неврология" },
-  { slug: "endocrinology",     icon: "endocrinology",ru: "Эндокринология",       kk: "Эндокринология" },
-  { slug: "gastroenterology",  icon: "gastro",       ru: "Гастроэнтерология",    kk: "Гастроэнтерология" },
-  { slug: "infectious_disease",icon: "infectious",   ru: "Инфекционные болезни", kk: "Жұқпалы аурулар" },
+  { slug: "all",               icon: "clinic",       ru: "Все",                  kk: "Барлығы",              en: "All" },
+  { slug: "urgent",            icon: "urgent",       ru: "Срочные",              kk: "Шұғыл",                en: "Urgent" },
+  { slug: "internal_medicine", icon: "therapy",      ru: "Терапия",              kk: "Терапия",              en: "Internal medicine" },
+  { slug: "cardiology",        icon: "cardiology",   ru: "Кардиология",          kk: "Кардиология",          en: "Cardiology" },
+  { slug: "pulmonology",       icon: "pulmonology",  ru: "Пульмонология",        kk: "Пульмонология",        en: "Pulmonology" },
+  { slug: "neurology",         icon: "neurology",    ru: "Неврология",           kk: "Неврология",           en: "Neurology" },
+  { slug: "endocrinology",     icon: "endocrinology",ru: "Эндокринология",       kk: "Эндокринология",       en: "Endocrinology" },
+  { slug: "gastroenterology",  icon: "gastro",       ru: "Гастроэнтерология",    kk: "Гастроэнтерология",    en: "Gastroenterology" },
+  { slug: "infectious_disease",icon: "infectious",   ru: "Инфекционные болезни", kk: "Жұқпалы аурулар",      en: "Infectious diseases" },
 ];
 
 const SPECIALTY_ORDER = SPECIALTIES.map((s) => s.slug).filter(
@@ -143,8 +152,13 @@ export default function PatientsPage() {
               style={{ background: "var(--primary-tint)", color: "var(--primary-deep)" }}>
               <MedIcon name="user" className="w-4 h-4" /> {studentName}
             </span>
+            <button onClick={handleRandom}
+              disabled={!scenarios.length || starting !== null}
+              className="btn btn-coral px-3.5 py-2 text-[13px]">
+              <MedIcon name="dice" className="w-4 h-4" /> <span className="hidden sm:inline">{L.random}</span>
+            </button>
             <div className="flex gap-0.5 p-0.5 rounded-xl" style={{ background: "var(--surface-2)", border: "1px solid var(--border-soft)" }}>
-              {(["ru", "kk"] as Lang[]).map((l) => (
+              {(["ru", "kk", "en"] as Lang[]).map((l) => (
                 <button key={l}
                   onClick={() => { setLang(l); localStorage.setItem("kms_lang", l); }}
                   className="px-2.5 py-1.5 rounded-lg text-xs font-extrabold transition-all"
@@ -152,15 +166,10 @@ export default function PatientsPage() {
                     background: lang === l ? "var(--primary)" : "transparent",
                     color: lang === l ? "#fff" : "var(--ink-soft)",
                   }}>
-                  {l === "ru" ? "RU" : "KZ"}
+                  {l === "ru" ? "RU" : l === "kk" ? "KZ" : "EN"}
                 </button>
               ))}
             </div>
-            <button onClick={handleRandom}
-              disabled={!scenarios.length || starting !== null}
-              className="btn btn-coral px-3.5 py-2 text-[13px]">
-              <MedIcon name="dice" className="w-4 h-4" /> <span className="hidden sm:inline">{L.random}</span>
-            </button>
           </div>
         </div>
 
@@ -234,7 +243,7 @@ export default function PatientsPage() {
 
         {!loading && total > 0 && (
           <p className="text-center text-xs font-semibold pt-2" style={{ color: "var(--ink-faint)" }}>
-            {lang === "ru" ? `Всего случаев: ${total}` : `Барлық жағдай: ${total}`}
+            {lang === "ru" ? `Всего случаев: ${total}` : lang === "kk" ? `Барлық жағдай: ${total}` : `Total cases: ${total}`}
           </p>
         )}
       </main>

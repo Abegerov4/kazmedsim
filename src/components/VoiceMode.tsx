@@ -5,7 +5,7 @@ import { Room, RoomEvent, Track, RemoteAudioTrack } from "livekit-client";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
-type Lang = "ru" | "kk";
+type Lang = "ru" | "kk" | "en";
 
 interface Props {
   scenarioId: number;
@@ -41,6 +41,18 @@ const LABELS = {
     mic_off: "Микрофон өшірілген",
     mic_on: "Микрофон қосулы",
     hint: "Табиғи сөйлеңіз — науқас сізді естиді. Кез келген уақытта тоқтата аласыз.",
+  },
+  en: {
+    title: "Voice mode",
+    connecting: "Connecting…",
+    listening: "Listening to you",
+    you_speaking: "You're speaking",
+    patient_speaking: "Patient is speaking",
+    error: "Connection error",
+    end: "End voice",
+    mic_off: "Microphone off",
+    mic_on: "Microphone on",
+    hint: "Speak naturally — the patient hears you. You can interrupt at any time.",
   },
 };
 

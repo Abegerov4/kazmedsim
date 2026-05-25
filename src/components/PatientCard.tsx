@@ -2,7 +2,7 @@
 
 type Difficulty = "easy" | "medium" | "hard";
 type Urgency = "routine" | "urgent";
-type Lang = "ru" | "kk";
+type Lang = "ru" | "kk" | "en";
 
 export interface PatientScenario {
   id: number;
@@ -29,20 +29,20 @@ const SPECIALTY_COLORS: Record<string, string> = {
   infectious_disease: "#2C8770",
 };
 
-const DIFFICULTY_CONFIG: Record<Difficulty, { level: number; ru: string; kk: string; color: string }> = {
-  easy:   { level: 1, ru: "Лёгкий",  kk: "Жеңіл",   color: "var(--mint)" },
-  medium: { level: 2, ru: "Средний", kk: "Орташа",  color: "var(--gold)" },
-  hard:   { level: 3, ru: "Сложный", kk: "Күрделі", color: "var(--danger)" },
+const DIFFICULTY_CONFIG: Record<Difficulty, { level: number; ru: string; kk: string; en: string; color: string }> = {
+  easy:   { level: 1, ru: "Лёгкий",  kk: "Жеңіл",   en: "Easy",   color: "var(--mint)" },
+  medium: { level: 2, ru: "Средний", kk: "Орташа",  en: "Medium", color: "var(--gold)" },
+  hard:   { level: 3, ru: "Сложный", kk: "Күрделі", en: "Hard",   color: "var(--danger)" },
 };
 
-const URGENCY_LABEL: Record<Urgency, { ru: string; kk: string }> = {
-  urgent:  { ru: "СРОЧНО",   kk: "ШҰҒЫЛ" },
-  routine: { ru: "Плановый", kk: "Жоспарлы" },
+const URGENCY_LABEL: Record<Urgency, { ru: string; kk: string; en: string }> = {
+  urgent:  { ru: "СРОЧНО",   kk: "ШҰҒЫЛ",      en: "URGENT" },
+  routine: { ru: "Плановый", kk: "Жоспарлы",   en: "Routine" },
 };
 
-const GENDER_LABEL: Record<string, { ru: string; kk: string }> = {
-  male:   { ru: "М", kk: "Е" },
-  female: { ru: "Ж", kk: "Ә" },
+const GENDER_LABEL: Record<string, { ru: string; kk: string; en: string }> = {
+  male:   { ru: "М", kk: "Е", en: "M" },
+  female: { ru: "Ж", kk: "Ә", en: "F" },
 };
 
 function getInitials(name: string): string {
@@ -64,9 +64,9 @@ export function PatientCard({ scenario: s, lang, onStart, loading }: Props) {
   const diff = DIFFICULTY_CONFIG[s.difficulty];
   const color = SPECIALTY_COLORS[s.specialty] ?? "#1B7A8F";
   const genderLabel = GENDER_LABEL[s.patient_gender]?.[lang] ?? s.patient_gender;
-  const startLabel = lang === "ru" ? "Начать приём" : "Қабылдауды бастау";
-  const loadingLabel = lang === "ru" ? "Открываем…" : "Ашылуда…";
-  const ageLabel = lang === "ru" ? "лет" : "жас";
+  const startLabel = lang === "ru" ? "Начать приём" : lang === "kk" ? "Қабылдауды бастау" : "Start appointment";
+  const loadingLabel = lang === "ru" ? "Открываем…" : lang === "kk" ? "Ашылуда…" : "Opening…";
+  const ageLabel = lang === "ru" ? "лет" : lang === "kk" ? "жас" : "yrs";
 
   return (
     <div

@@ -5,7 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 import ReactMarkdown from "react-markdown";
 import { MedIcon } from "@/components/MedIcon";
 
-type Lang = "ru" | "kk";
+type Lang = "ru" | "kk" | "en";
 
 const GRADING_STEPS = {
   ru: [
@@ -27,6 +27,16 @@ const GRADING_STEPS = {
     "Ем жоспарын ДСМ ұсыныстарымен салыстырамыз",
     "Домендер бойынша баллдарды қоямыз",
     "Жеке кері байланыс дайындаймыз",
+  ],
+  en: [
+    "Replaying your dialogue with the patient",
+    "Analysing history-taking questions",
+    "Matching differential diagnosis with complaints",
+    "Reviewing the tests you ordered",
+    "Scoring orders against clinical protocols",
+    "Comparing treatment plan with MoH RK guidance",
+    "Computing per-domain scores",
+    "Preparing personalised feedback",
   ],
 };
 
@@ -93,6 +103,38 @@ const LABELS = {
     nextCase: "Келесі жағдай →",
     onTarget: "норма",
     belowTarget: "нормадан төмен",
+    out: "/ 10",
+  },
+  en: {
+    gradingTitle: "Preceptor grading...",
+    yourMark: "YOUR SCORE",
+    verdict: "VERDICT",
+    verdicts: [
+      { min: 8,   label: "Excellent",    tier: "top tier",       color: "#3FA98C", bg: "linear-gradient(135deg,#E4F4EF,#CDEEE3)" },
+      { min: 6,   label: "Good",         tier: "above average",  color: "#1B7A8F", bg: "linear-gradient(135deg,#E6F3F5,#CCE7EB)" },
+      { min: 4,   label: "Satisfactory", tier: "mid tier",       color: "#CC9A3F", bg: "linear-gradient(135deg,#F8EFD9,#F0DCAA)" },
+      { min: 0,   label: "Unsatisfactory", tier: "below threshold", color: "#D9534F", bg: "linear-gradient(135deg,#FBE3E2,#F6CECC)" },
+    ],
+    domainScores: "DOMAIN SCORES",
+    domains: ["History taking", "Clinical management", "Communication"],
+    perCriterion: "BREAKDOWN",
+    criteria: [
+      { key: "anamnesis",     label: "History taking",          group: "DATA GATHERING" },
+      { key: "communication", label: "Communication",           group: "COMMUNICATION" },
+      { key: "reasoning",     label: "Clinical reasoning",      group: "CLINICAL MANAGEMENT" },
+      { key: "diagnosis",     label: "Diagnostic accuracy",     group: "CLINICAL MANAGEMENT" },
+      { key: "treatment",     label: "Treatment adequacy",      group: "CLINICAL MANAGEMENT" },
+    ],
+    met: "MET",
+    notMet: "NOT MET",
+    partial: "PARTIAL",
+    feedback: "Preceptor's review",
+    expand: "expand",
+    collapse: "collapse",
+    backToPolyclinic: "← Back to polyclinic",
+    nextCase: "Next case →",
+    onTarget: "on target",
+    belowTarget: "below target",
     out: "/ 10",
   },
 };
@@ -178,7 +220,9 @@ function GradingScreen({ lang, onDone }: { lang: Lang; onDone: () => void }) {
           <StarIcon size={60} />
           <div>
             <h1 className="text-2xl font-black" style={{ color: "#15243B" }}>{L.gradingTitle}</h1>
-            <p className="text-sm mt-0.5" style={{ color: "#5C6E84" }}>Куратор: проф. Сейткали Д.А.</p>
+            <p className="text-sm mt-0.5" style={{ color: "#5C6E84" }}>
+              {lang === "ru" ? "Куратор: проф. Сейткали Д.А." : lang === "kk" ? "Куратор: проф. Сейткали Д.А." : "Preceptor: Prof. D.A. Seitkali"}
+            </p>
           </div>
         </div>
 

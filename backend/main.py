@@ -11,6 +11,70 @@ from backend.grader import grade_session
 
 load_dotenv(".env.local")
 
+
+# ── i18n helpers ────────────────────────────────────────────────────────────
+
+# Language label that gets inlined into prompts (so the LLM knows the target
+# language by name, not just code).
+_LANG_LABEL = {
+    "ru": "русском",
+    "kk": "қазақ тілінде",
+    "en": "English",
+}
+
+# The opening line the student is presumed to say first ("Hi, I'm your doctor.
+# What's bothering you?") — used to seed the patient persona's first reply.
+_OPENING_LINE = {
+    "ru": "Здравствуйте, я ваш врач. Расскажите, что вас беспокоит?",
+    "kk": "Сәлеметсіз бе, мен сіздің дәрігеріңізмін. Не мазалап жүр?",
+    "en": "Hello, I'm your doctor. What's bothering you today?",
+}
+
+
+def _norm_lang(lang: str) -> str:
+    return lang if lang in ("ru", "kk", "en") else "ru"
+
+
+# Cyrillic lab-unit fragments → English equivalents. Applied with longest-first
+# substitution so "мкЕд/мл" beats "Ед/мл".
+_UNIT_MAP = [
+    ("ммоль", "mmol"),
+    ("мкмоль", "μmol"),
+    ("нмоль", "nmol"),
+    ("мкЕд",  "μIU"),
+    ("ЕД",    "U"),
+    ("Ед",    "U"),
+    ("МЕ",    "IU"),
+    ("мкг",   "μg"),
+    ("нг",    "ng"),
+    ("пг",    "pg"),
+    ("фл",    "fL"),
+    ("мкл",   "μL"),
+    ("мл",    "mL"),
+    ("дл",    "dL"),
+    ("мг",    "mg"),
+    ("кг",    "kg"),
+    ("г",     "g"),
+    ("мм",    "mm"),
+    ("см",    "cm"),
+    ("ч",     "h"),
+    ("мин",   "min"),
+    ("сек",   "sec"),
+    ("с",     "s"),
+    ("л",     "L"),
+    ("/",     "/"),
+]
+
+
+def _en_unit(unit: str) -> str:
+    if not unit:
+        return unit
+    # Pre-sort longest first so multi-char tokens win
+    out = unit
+    for ru, en in sorted(_UNIT_MAP, key=lambda p: -len(p[0])):
+        out = out.replace(ru, en)
+    return out
+
 app = FastAPI(title="KazMedSim API")
 
 app.add_middleware(
@@ -68,18 +132,19 @@ def list_scenarios(lang: str = "ru", difficulty: str | None = None, specialty: s
 def start_session(req: StartSessionRequest):
     from anthropic import Anthropic
 
-    scenario = get_scenario(req.scenario_id, req.language)
+    lang = _norm_lang(req.language)
+    scenario = get_scenario(req.scenario_id, lang)
     if not scenario:
         raise HTTPException(status_code=404, detail="Scenario not found")
 
     db = get_db()
     cur = db.execute(
         "INSERT INTO sessions (scenario_id, student_name, language) VALUES (?, ?, ?)",
-        (req.scenario_id, req.student_name, req.language),
+        (req.scenario_id, req.student_name, lang),
     )
     session_id = cur.lastrowid
 
-    prompt_file = os.path.join(os.path.dirname(__file__), "prompts", f"patient_{req.language}.txt")
+    prompt_file = os.path.join(os.path.dirname(__file__), "prompts", f"patient_{lang}.txt")
     with open(prompt_file, encoding="utf-8") as f:
         system_prompt = f.read().format(
             name=scenario["patient_name"],
@@ -88,7 +153,7 @@ def start_session(req: StartSessionRequest):
             chief_complaint=scenario["chief_complaint"],
             history=scenario["history"],
             allergies=scenario["allergies"],
-            language="русском" if req.language == "ru" else "қазақ тілінде",
+            language=_LANG_LABEL[lang],
         )
 
     client = Anthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
@@ -96,7 +161,7 @@ def start_session(req: StartSessionRequest):
         model="claude-sonnet-4-6",
         max_tokens=300,
         system=system_prompt,
-        messages=[{"role": "user", "content": "Здравствуйте, я ваш врач. Расскажите, что вас беспокоит?" if req.language == "ru" else "Сәлеметсіз бе, мен сіздің дәрігеріңізмін. Не мазалап жүр?"}],
+        messages=[{"role": "user", "content": _OPENING_LINE[lang]}],
     )
     patient_intro = intro.content[0].text
 
@@ -119,13 +184,14 @@ def send_message(req: MessageRequest):
     if not session:
         raise HTTPException(status_code=404, detail="Session not found")
 
-    scenario = get_scenario(session["scenario_id"], session["language"])
+    lang = _norm_lang(session["language"])
+    scenario = get_scenario(session["scenario_id"], lang)
     logs = db.execute(
         "SELECT role, message FROM dialog_log WHERE session_id = ? ORDER BY id",
         (req.session_id,),
     ).fetchall()
 
-    prompt_file = f"backend/prompts/patient_{session['language']}.txt"
+    prompt_file = f"backend/prompts/patient_{lang}.txt"
     with open(prompt_file, encoding="utf-8") as f:
         system_prompt = f.read().format(
             name=scenario["patient_name"],
@@ -134,7 +200,7 @@ def send_message(req: MessageRequest):
             chief_complaint=scenario["chief_complaint"],
             history=scenario["history"],
             allergies=scenario["allergies"],
-            language="русском" if session["language"] == "ru" else "қазақ тілінде",
+            language=_LANG_LABEL[lang],
         )
 
     messages = []
@@ -174,17 +240,25 @@ def get_labs(session_id: int):
     if not session:
         raise HTTPException(status_code=404, detail="Session not found")
 
-    scenario = get_scenario(session["scenario_id"], session["language"])
+    lang = _norm_lang(session["language"])
+    scenario = get_scenario(session["scenario_id"], lang)
     labs = json.loads(scenario["lab_results_json"])
 
-    is_kk = session["language"] == "kk"
+    def pick(lab: dict, base: str) -> str:
+        # name: name_ru / name_kk / name_en
+        # value, normal: value_kk / value_en (descriptive override), else `value`
+        if base == "name":
+            return lab.get(f"name_{lang}") or lab.get("name_ru", "")
+        if lang == "ru":
+            return lab[base]
+        override = lab.get(f"{base}_{lang}")
+        return override if override else lab[base]
+
     result = []
     for lab in labs:
-        name = lab["name_kk"] if is_kk else lab["name_ru"]
-        # Descriptive fields may have language-specific overrides; fall back
-        # to the original `value`/`normal` (Russian) if no kk variant exists.
-        value = lab.get("value_kk", lab["value"]) if is_kk else lab["value"]
-        normal = lab.get("normal_kk", lab["normal"]) if is_kk else lab["normal"]
+        name = pick(lab, "name")
+        value = pick(lab, "value")
+        normal = pick(lab, "normal")
         if "is_abnormal" in lab:
             is_abnormal = lab["is_abnormal"]
         elif "normal_min" in lab and isinstance(lab["value"], (int, float)):
@@ -194,7 +268,7 @@ def get_labs(session_id: int):
         entry = {
             "name": name,
             "value": value,
-            "unit": lab["unit"],
+            "unit": _en_unit(lab["unit"]) if lang == "en" else lab["unit"],
             "normal": normal,
             "is_abnormal": is_abnormal,
         }
@@ -218,26 +292,33 @@ def end_session(req: EndSessionRequest):
         (req.session_id,),
     ).fetchall()
 
+    lang = _norm_lang(session["language"])
+    speaker_labels = {
+        "ru": ("Студент", "Пациент"),
+        "kk": ("Студент", "Науқас"),
+        "en": ("Student", "Patient"),
+    }[lang]
     transcript = "\n".join(
-        f"{'Студент' if l['role'] == 'student' else 'Пациент'}: {l['message']}" for l in logs
+        f"{speaker_labels[0] if l['role'] == 'student' else speaker_labels[1]}: {l['message']}"
+        for l in logs
     )
 
-    scenario = get_scenario(session["scenario_id"], session["language"])
+    scenario = get_scenario(session["scenario_id"], lang)
 
     # Anchor data so the grader doesn't improvise different "expected" criteria
     # on every run. Same scenario + same student input → consistent score.
-    is_kk = session["language"] == "kk"
-    relevant_tests = [
-        (lab["name_kk"] if is_kk else lab["name_ru"])
-        for lab in json.loads(scenario["lab_results_json"])
-    ]
+    relevant_tests = []
+    for lab in json.loads(scenario["lab_results_json"]):
+        name = lab.get(f"name_{lang}") or lab.get("name_ru", "")
+        if name:
+            relevant_tests.append(name)
 
     grade = grade_session(
         transcript=transcript,
         correct_diagnosis=scenario["correct_diagnosis"],
         student_diagnosis=req.student_diagnosis,
         student_treatment=req.student_treatment,
-        language=session["language"],
+        language=lang,
         ordered_tests=req.ordered_tests,
         examined=req.examined,
         elapsed_seconds=req.elapsed_seconds,
@@ -289,12 +370,13 @@ def voice_token(req: VoiceTokenRequest):
     from livekit import api as lk_api
     from anthropic import Anthropic
 
-    # Voice mode is Russian-only — Cartesia has no native Kazakh voices and
-    # mixing Russian voices with Kazakh text produces broken speech.
-    if req.language != "ru":
+    # Voice mode supports ru and en. Cartesia has no native Kazakh voices,
+    # so kk falls back to text-only mode.
+    lang = _norm_lang(req.language)
+    if lang == "kk":
         raise HTTPException(
             status_code=400,
-            detail="Voice mode is currently available only in Russian (ru). Use text mode for Kazakh.",
+            detail="Voice mode is not available in Kazakh (no native voices). Use text mode for Kazakh.",
         )
 
     livekit_url = os.environ.get("LIVEKIT_URL")
@@ -303,12 +385,12 @@ def voice_token(req: VoiceTokenRequest):
     if not (livekit_url and livekit_key and livekit_secret):
         raise HTTPException(status_code=500, detail="LiveKit env vars not configured")
 
-    scenario = get_scenario(req.scenario_id, req.language)
+    scenario = get_scenario(req.scenario_id, lang)
     if not scenario:
         raise HTTPException(status_code=404, detail="Scenario not found")
 
     # Build the patient persona system prompt (same template as text mode)
-    prompt_file = os.path.join(os.path.dirname(__file__), "prompts", f"patient_{req.language}.txt")
+    prompt_file = os.path.join(os.path.dirname(__file__), "prompts", f"patient_{lang}.txt")
     with open(prompt_file, encoding="utf-8") as f:
         system_prompt = f.read().format(
             name=scenario["patient_name"],
@@ -317,7 +399,7 @@ def voice_token(req: VoiceTokenRequest):
             chief_complaint=scenario["chief_complaint"],
             history=scenario["history"],
             allergies=scenario["allergies"],
-            language="русском" if req.language == "ru" else "қазақ тілінде",
+            language=_LANG_LABEL[lang],
         )
 
     # Generate the patient's opening line ahead of time so the worker can
@@ -327,14 +409,7 @@ def voice_token(req: VoiceTokenRequest):
         model="claude-haiku-4-5-20251001",
         max_tokens=200,
         system=system_prompt,
-        messages=[{
-            "role": "user",
-            "content": (
-                "Здравствуйте, я ваш врач. Расскажите, что вас беспокоит?"
-                if req.language == "ru"
-                else "Сәлеметсіз бе, мен сіздің дәрігеріңізмін. Не мазалап жүр?"
-            ),
-        }],
+        messages=[{"role": "user", "content": _OPENING_LINE[lang]}],
     )
     initial_line = intro.content[0].text
 
@@ -342,7 +417,7 @@ def voice_token(req: VoiceTokenRequest):
     db = get_db()
     cur = db.execute(
         "INSERT INTO sessions (scenario_id, student_name, language) VALUES (?, ?, ?)",
-        (req.scenario_id, req.student_name, req.language),
+        (req.scenario_id, req.student_name, lang),
     )
     session_id = cur.lastrowid
     db.execute(
@@ -356,7 +431,7 @@ def voice_token(req: VoiceTokenRequest):
     metadata = {
         "case_id": req.scenario_id,
         "session_id": session_id,
-        "language": req.language,
+        "language": lang,
         "gender": scenario["patient_gender"],
         "system_prompt": system_prompt,
         "initial_line": initial_line,
@@ -428,7 +503,7 @@ def assistant(req: AssistantRequest):
     from openai import OpenAI
     from backend.assistant_tools import TOOL_SCHEMAS, TOOL_IMPLS
 
-    lang = req.language if req.language in ("ru", "kk") else "ru"
+    lang = req.language if req.language in ("ru", "kk", "en") else "ru"
     prompt_file = os.path.join(os.path.dirname(__file__), "prompts", f"assistant_{lang}.txt")
     with open(prompt_file, encoding="utf-8") as f:
         system_prompt = f.read()
@@ -483,7 +558,7 @@ def assistant(req: AssistantRequest):
                         result = impl(args)
                     except Exception as e:
                         result = {"error": f"Tool execution failed: {e}"}
-                chip = _summarize_tool_call(tc.function.name, result)
+                chip = _summarize_tool_call(tc.function.name, result, lang)
                 if chip:
                     tools_used.append(chip)
                 messages.append({
@@ -514,34 +589,40 @@ _CALC_LABELS = {
 }
 
 
-def _summarize_tool_call(tool_name: str, result: dict) -> dict | None:
+_CHIP_LABELS = {
+    "ru": {"protocol": "Протокол", "no_inter": "Взаимодействия: не обнаружено", "inter": "Взаимодействия"},
+    "kk": {"protocol": "Хаттама",  "no_inter": "Өзара әсер: табылмады",     "inter": "Өзара әсерлер"},
+    "en": {"protocol": "Protocol", "no_inter": "Interactions: none found", "inter": "Interactions"},
+}
+
+
+def _summarize_tool_call(tool_name: str, result: dict, lang: str = "ru") -> dict | None:
     """Make a short chip-friendly summary of a tool call for the UI."""
     if not isinstance(result, dict):
         return None
     if "error" in result:
         return None
+    L = _CHIP_LABELS.get(lang, _CHIP_LABELS["ru"])
 
     if tool_name == "search_medical_protocol":
         if not result.get("found"):
             return None
         icd = result.get("icd10", "")
         name = result.get("name", "")
-        return {"icon": "📋", "label": f"Протокол {icd} — {name}".strip(" —")}
+        return {"icon": "📋", "label": f"{L['protocol']} {icd} — {name}".strip(" —")}
 
     if tool_name == "clinical_calculator":
         if "score" in result or "egfr_ml_min_173m2" in result:
-            # Extract the calc identifier from interpretation if possible
             interp = result.get("interpretation", "")
-            # Fallback: use first word of interp
             return {"icon": "🧮", "label": interp}
         return None
 
     if tool_name == "drug_interactions":
         warnings = result.get("warnings", [])
         if not warnings:
-            return {"icon": "💊", "label": "Взаимодействия: не обнаружено"}
+            return {"icon": "💊", "label": L["no_inter"]}
         severities = [w.get("severity", "?") for w in warnings]
         sev_str = ", ".join(severities)
-        return {"icon": "💊", "label": f"Взаимодействия: {len(warnings)} ({sev_str})"}
+        return {"icon": "💊", "label": f"{L['inter']}: {len(warnings)} ({sev_str})"}
 
     return None

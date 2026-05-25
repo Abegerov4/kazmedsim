@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 
-type Lang = "ru" | "kk";
+type Lang = "ru" | "kk" | "en";
 
 /* ── Line-art medical icons (original, hand-built) ──────────── */
 
@@ -97,11 +97,32 @@ const STEPS = {
       points: [] as string[],
     },
   ],
+  en: [
+    {
+      kicker: "01 · what it is",
+      title: "Virtual polyclinic",
+      body: "KazMedSim is a clinical-encounter trainer. Dozens of realistic cases: you speak with a virtual patient, take the history and elicit complaints — just like a real primary-care visit.",
+      points: [] as string[],
+    },
+    {
+      kicker: "02 · how a visit flows",
+      title: "Four steps per encounter",
+      body: "Pick a patient and ask about their complaints. Order labs and review the results. Set a diagnosis and treatment — at the end you get a detailed debrief.",
+      points: ["Interview", "Labs", "Diagnosis", "Debrief"],
+    },
+    {
+      kicker: "03 · important",
+      title: "This is a training simulator",
+      body: "KazMedSim is built for medical students and residents. It is a simulator for learning, not a clinical system — do not use it for real medical decisions.",
+      points: [] as string[],
+    },
+  ],
 };
 
 const UI = {
   ru: { skip: "Пропустить", back: "Назад", next: "Далее", enter: "Войти в клинику", step: "Шаг" },
   kk: { skip: "Өткізіп жіберу", back: "Артқа", next: "Әрі қарай", enter: "Клиникаға кіру", step: "Қадам" },
+  en: { skip: "Skip", back: "Back", next: "Next", enter: "Enter the clinic", step: "Step" },
 };
 
 export default function IntroPage() {
