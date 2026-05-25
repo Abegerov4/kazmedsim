@@ -27,8 +27,7 @@ debrief from an AI mentor.
 - **Structured grading** — 5 rubrics (anamnesis / communication / reasoning /
   diagnosis / treatment), each 0–10, with bilingual feedback
 - **Trilingual** — every label, prompt, scenario, and grader output exists in
-  `ru`, `kk`, and `en` (voice mode supports `ru` and `en`; Kazakh is
-  text-only since Cartesia has no native Kazakh voices)
+  `ru`, `kk`, and `en`
 
 ## AI Agent (tool use)
 

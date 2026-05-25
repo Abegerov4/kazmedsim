@@ -5,7 +5,6 @@ import { useParams, useRouter } from "next/navigation";
 import { sendMessage, getLabs, endSession } from "@/lib/api";
 import { DIAGNOSIS_OPTIONS, FORMULARY, FORMULARY_CATEGORIES, EXAM_DATA, VITALS_META, EXTRA_TESTS } from "@/lib/clinicalData";
 import { MedIcon } from "@/components/MedIcon";
-import { VoiceMode } from "@/components/VoiceMode";
 
 type Lang = "ru" | "kk" | "en";
 
@@ -381,7 +380,6 @@ export default function SessionPage() {
   const [rightPanel, setRightPanel] = useState<"record" | "exam" | "labs" | "diagnosis" | null>(null);
   const [listening, setListening] = useState(false);
   const [elapsedSec, setElapsedSec] = useState(0);
-  const [voiceMode, setVoiceMode] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const L = LABELS[lang];
 
@@ -949,29 +947,6 @@ export default function SessionPage() {
             }}
           />
 
-          {(() => {
-            const voiceAvailable = lang !== "kk";
-            const micTitle = voiceAvailable
-              ? (lang === "ru" ? "Голосовой режим" : lang === "en" ? "Voice mode" : "Дауыстық режим")
-              : "Дауыстық режим қазақ тілінде қолжетімсіз · Voice mode is not available in Kazakh";
-            return (
-              <button
-                onClick={() => voiceAvailable && setVoiceMode(true)}
-                disabled={thinking || !voiceAvailable}
-                title={micTitle}
-                className="px-3 py-2.5 rounded-xl text-sm font-extrabold transition-all hover:brightness-110 disabled:opacity-40 shrink-0"
-                style={{
-                  background: voiceAvailable ? "rgba(70,194,160,0.18)" : "rgba(255,255,255,0.05)",
-                  color: voiceAvailable ? "#5FD0B0" : "#5E7782",
-                  border: `1px solid ${voiceAvailable ? "rgba(70,194,160,0.4)" : "rgba(255,255,255,0.12)"}`,
-                  cursor: voiceAvailable ? "pointer" : "not-allowed",
-                }}
-              >
-                🎤
-              </button>
-            );
-          })()}
-
           <button
             onClick={handleSend}
             disabled={!input.trim() || thinking}
@@ -996,23 +971,8 @@ export default function SessionPage() {
               ⏱ {L.timeUp}
             </span>
           )}
-          {lang === "kk" && (
-            <span className="text-[10.5px] font-semibold tracking-wide" style={{ color: "#7C94A0" }}>
-              🎤 Дауыстық режим қазақ тілінде қолжетімсіз · Voice mode unavailable in Kazakh
-            </span>
-          )}
         </div>
       </div>
-
-      {/* Voice mode overlay */}
-      {voiceMode && scenario && (
-        <VoiceMode
-          scenarioId={Number(scenario.id)}
-          studentName={studentName}
-          lang={lang}
-          onClose={() => setVoiceMode(false)}
-        />
-      )}
 
       {/* Labs modal fallback (if panel not open) */}
       {showLabs && labs && (
