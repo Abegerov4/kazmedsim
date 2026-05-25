@@ -78,9 +78,15 @@ def _en_unit(unit: str) -> str:
 
 app = FastAPI(title="KazMedSim API")
 
+# Allowed origins come from env (comma-separated) so we can add the Vercel
+# preview / prod URLs at deploy time without rebuilding the image.
+_ALLOWED = os.environ.get(
+    "ALLOWED_ORIGINS",
+    "http://localhost:3000",
+).split(",")
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"],
+    allow_origins=[o.strip() for o in _ALLOWED if o.strip()],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

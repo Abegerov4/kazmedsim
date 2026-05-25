@@ -21,8 +21,13 @@ venv/
 *.egg-info/
 *.egg-info/
 
-# Database (keep schema.sql, ignore binary + local-only event log)
+# Database — keep the seed snapshot in git so Railway has data on cold start,
+# but ignore *other* .db files (dev copies, journals) and the event log.
 db/*.db
+!db/kazmedsim.db
+db/*.db-journal
+db/*.db-wal
+db/*.db-shm
 db/events.jsonl
 
 # RAG source PDFs — too large for git, redistribute separately
