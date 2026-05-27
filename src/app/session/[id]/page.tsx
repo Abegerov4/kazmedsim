@@ -2,9 +2,10 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { sendMessage, getLabs, endSession } from "@/lib/api";
+import { sendMessageStream, getLabs, endSession } from "@/lib/api";
 import { DIAGNOSIS_OPTIONS, FORMULARY, FORMULARY_CATEGORIES, EXAM_DATA, VITALS_META, EXTRA_TESTS } from "@/lib/clinicalData";
 import { MedIcon } from "@/components/MedIcon";
+import { VoiceMode } from "@/components/VoiceMode";
 
 type Lang = "ru" | "kk" | "en";
 
@@ -47,6 +48,7 @@ const LABELS = {
     timer: "Приём",
     overtime: "Переработка",
     timeUp: "Время вышло — завершите приём",
+    voice: "Голос",
   },
   kk: {
     back: "← Кезек",
@@ -86,6 +88,7 @@ const LABELS = {
     timer: "Қабылдау",
     overtime: "Уақыттан асу",
     timeUp: "Уақыт бітті — қабылдауды аяқтаңыз",
+    voice: "Дауыс",
   },
   en: {
     back: "← Queue",
@@ -125,6 +128,7 @@ const LABELS = {
     timer: "Visit",
     overtime: "Overtime",
     timeUp: "Time's up — finish the appointment",
+    voice: "Voice",
   },
 };
 
@@ -380,7 +384,8 @@ export default function SessionPage() {
   const [rightPanel, setRightPanel] = useState<"record" | "exam" | "labs" | "diagnosis" | null>(null);
   const [listening, setListening] = useState(false);
   const [elapsedSec, setElapsedSec] = useState(0);
-  const inputRef = useRef<HTMLInputElement>(null);
+  const [voiceOpen, setVoiceOpen] = useState(false);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
   const L = LABELS[lang];
 
   const lastPatientMsg = [...messages].reverse().find(m => m.role === "patient")?.text || "";
@@ -446,14 +451,40 @@ export default function SessionPage() {
   async function handleSend() {
     const msg = input.trim();
     if (!msg || thinking) return;
-    setMessages((m) => [...m, { role: "student", text: msg }]);
+    // Push the student turn and an empty patient turn that grows as
+    // tokens stream in. Keep `thinking` true until the first delta
+    // arrives so the bubble shows dots during the initial latency,
+    // then switches to the live transcript.
+    setMessages((m) => [...m, { role: "student", text: msg }, { role: "patient", text: "" }]);
     setInput("");
     setThinking(true);
     setListening(false);
+    let gotFirst = false;
     try {
-      const data = await sendMessage(Number(id), msg);
-      setMessages((m) => [...m, { role: "patient", text: data.patient_response }]);
-    } catch { /* silent */ }
+      await sendMessageStream(Number(id), msg, (delta) => {
+        if (!gotFirst) {
+          gotFirst = true;
+          setThinking(false);
+        }
+        setMessages((m) => {
+          const copy = [...m];
+          const last = copy[copy.length - 1];
+          if (last && last.role === "patient") {
+            copy[copy.length - 1] = { ...last, text: last.text + delta };
+          }
+          return copy;
+        });
+      });
+    } catch {
+      // If the stream errored out before any delta arrived, drop the
+      // empty patient placeholder so the UI doesn't look stuck.
+      setMessages((m) => {
+        const last = m[m.length - 1];
+        return last && last.role === "patient" && last.text === ""
+          ? m.slice(0, -1)
+          : m;
+      });
+    }
     setThinking(false);
   }
 
@@ -931,21 +962,60 @@ export default function SessionPage() {
             );
           })}
 
-          {/* Text input */}
-          <input
+          {/* Text input — auto-growing textarea so long questions wrap
+              vertically instead of scrolling sideways. Enter sends,
+              Shift+Enter inserts a newline. */}
+          <textarea
             ref={inputRef}
             value={input}
-            onChange={(e) => { setInput(e.target.value); setListening(e.target.value.length > 0); }}
-            onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && handleSend()}
+            rows={1}
+            onChange={(e) => {
+              setInput(e.target.value);
+              setListening(e.target.value.length > 0);
+              const el = e.currentTarget;
+              el.style.height = "auto";
+              el.style.height = Math.min(el.scrollHeight, 140) + "px";
+            }}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && !e.shiftKey) {
+                e.preventDefault();
+                handleSend();
+                if (inputRef.current) inputRef.current.style.height = "auto";
+              }
+            }}
             placeholder={L.placeholder}
             disabled={thinking}
-            className="flex-1 px-4 py-2.5 rounded-xl text-sm focus:outline-none disabled:opacity-50"
+            className="flex-1 px-4 py-2.5 rounded-xl text-sm focus:outline-none disabled:opacity-50 resize-none leading-snug"
             style={{
               background: "rgba(255,255,255,0.07)",
               border: "1.5px solid rgba(52,169,188,0.3)",
               color: "#EAF6F7",
+              minHeight: 42,
+              maxHeight: 140,
+              overflowY: "auto",
             }}
           />
+
+          {/* Voice mode toggle — opens OpenAI Realtime call with the patient */}
+          <button
+            onClick={() => setVoiceOpen(true)}
+            disabled={thinking || voiceOpen}
+            title={L.voice}
+            aria-label={L.voice}
+            className="px-3.5 py-2.5 rounded-xl text-xs font-extrabold transition-all whitespace-nowrap hover:brightness-110 disabled:opacity-40 inline-flex items-center gap-1.5"
+            style={{
+              background: "rgba(70,194,160,0.18)",
+              color: "#5FD0B0",
+              border: "1px solid rgba(70,194,160,0.4)",
+            }}
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+              <rect x="9" y="3" width="6" height="12" rx="3" />
+              <path d="M5 11a7 7 0 0 0 14 0" />
+              <line x1="12" y1="18" x2="12" y2="22" />
+            </svg>
+            <span className="hidden md:inline">{L.voice}</span>
+          </button>
 
           <button
             onClick={handleSend}
@@ -973,6 +1043,19 @@ export default function SessionPage() {
           )}
         </div>
       </div>
+
+      {/* Voice mode overlay — WebRTC chat with patient via OpenAI Realtime */}
+      {voiceOpen && (
+        <VoiceMode
+          sessionId={Number(id)}
+          lang={lang}
+          history={messages}
+          onTranscript={(role, text) => {
+            setMessages((m) => [...m, { role, text }]);
+          }}
+          onClose={() => setVoiceOpen(false)}
+        />
+      )}
 
       {/* Labs modal fallback (if panel not open) */}
       {showLabs && labs && (

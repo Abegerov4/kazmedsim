@@ -19,14 +19,53 @@ export async function startSession(scenario_id: number, student_name: string, la
   return res.json();
 }
 
-export async function sendMessage(session_id: number, message: string) {
+/**
+ * Stream the patient reply via SSE, invoking `onDelta` for each text chunk
+ * as it arrives. Resolves with the full accumulated text once `done`.
+ */
+export async function sendMessageStream(
+  session_id: number,
+  message: string,
+  onDelta: (delta: string) => void,
+): Promise<{ full: string }> {
   const res = await fetch(`${API_URL}/api/session/message`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ session_id, message }),
   });
-  if (!res.ok) throw new Error("Failed to send message");
-  return res.json();
+  if (!res.ok || !res.body) throw new Error("Failed to send message");
+
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  let full = "";
+
+  // Parse the SSE stream by splitting on "\n\n" boundaries.
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+
+    let idx: number;
+    while ((idx = buffer.indexOf("\n\n")) !== -1) {
+      const eventStr = buffer.slice(0, idx);
+      buffer = buffer.slice(idx + 2);
+      const m = eventStr.match(/^data: (.+)$/m);
+      if (!m) continue;
+      try {
+        const data = JSON.parse(m[1]);
+        if (typeof data.delta === "string") {
+          full += data.delta;
+          onDelta(data.delta);
+        } else if (data.done) {
+          return { full };
+        } else if (data.error) {
+          throw new Error(data.error);
+        }
+      } catch { /* malformed chunk — ignore */ }
+    }
+  }
+  return { full };
 }
 
 export async function getLabs(session_id: number) {
@@ -46,6 +85,35 @@ export async function askAssistant(messages: AssistantMsg[], language: string) {
   });
   if (!res.ok) throw new Error("Failed to reach assistant");
   return res.json() as Promise<{ reply: string; tools_used?: ToolChip[] }>;
+}
+
+export interface RealtimeSession {
+  client_secret: string;
+  expires_at?: number;
+  instructions: string;
+  voice: string;
+  model: string;
+}
+
+export async function getRealtimeSession(session_id: number): Promise<RealtimeSession> {
+  const res = await fetch(`${API_URL}/api/realtime/session`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ session_id }),
+  });
+  if (!res.ok) throw new Error("Failed to mint realtime session");
+  return res.json();
+}
+
+export async function logTurn(session_id: number, role: "student" | "patient", text: string) {
+  if (!text.trim()) return;
+  try {
+    await fetch(`${API_URL}/api/session/log_turn`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ session_id, role, text }),
+    });
+  } catch { /* fire-and-forget — voice still works if logging fails */ }
 }
 
 export async function endSession(
