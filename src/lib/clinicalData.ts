@@ -424,6 +424,19 @@ export const FORMULARY: Med[] = [
   { id: "ferrous",     name: "Железа сульфат 100 мг",     cat: "other", note: { ru: "Препарат железа · табл", kk: "Темір препараты · табл", en: "Iron preparation · tab" } },
   { id: "rehydron",    name: "Регидрон",                  cat: "other", note: { ru: "Раствор для регидратации · пакетик", kk: "Регидратация ерітіндісі · пакет", en: "Oral rehydration solution · sachet" } },
   { id: "xylometazoline", name: "Ксилометазолин",         cat: "other", note: { ru: "Деконгестант · спрей", kk: "Деконгестант · спрей", en: "Decongestant · spray" } },
+  // Anticoagulants / thrombolytics (ТЭЛА, ТГВ, ишемический инсульт)
+  { id: "enoxaparin",  name: "Эноксапарин 40 мг",         cat: "cardio", note: { ru: "НМГ (антикоагулянт) · п/к", kk: "ТМГ (антикоагулянт) · т/а", en: "LMWH (anticoagulant) · SC" } },
+  { id: "rivaroxaban", name: "Ривароксабан 15 мг",        cat: "cardio", note: { ru: "ПОАК (антикоагулянт) · табл", kk: "ТПАК (антикоагулянт) · табл", en: "DOAC (anticoagulant) · tab" } },
+  { id: "apixaban",    name: "Апиксабан 5 мг",            cat: "cardio", note: { ru: "ПОАК (антикоагулянт) · табл", kk: "ТПАК (антикоагулянт) · табл", en: "DOAC (anticoagulant) · tab" } },
+  { id: "alteplase",   name: "Альтеплаза 50 мг",          cat: "cardio", note: { ru: "Тромболитик (rt-PA) · в/в", kk: "Тромболитик (rt-PA) · к/т", en: "Thrombolytic (rt-PA) · IV" } },
+  { id: "propranolol", name: "Пропранолол 40 мг",         cat: "cardio", note: { ru: "Неселективный бета-блокатор · табл", kk: "Селективті емес бета-блокатор · табл", en: "Non-selective beta-blocker · tab" } },
+  // Anticonvulsants (эпилепсия)
+  { id: "valproate",   name: "Вальпроат натрия 500 мг",   cat: "other", note: { ru: "Антиконвульсант · табл", kk: "Антиконвульсант · табл", en: "Anticonvulsant · tab" } },
+  { id: "levetiracet", name: "Леветирацетам 500 мг",      cat: "other", note: { ru: "Антиконвульсант · табл", kk: "Антиконвульсант · табл", en: "Anticonvulsant · tab" } },
+  // Endocrine — thyroid & adrenal replacement (Грейвс, болезнь Аддисона)
+  { id: "thiamazole",  name: "Тиамазол 10 мг",            cat: "endo", note: { ru: "Тиреостатик · табл", kk: "Тиреостатик · табл", en: "Antithyroid (thionamide) · tab" } },
+  { id: "hydrocort",   name: "Гидрокортизон 100 мг",      cat: "endo", note: { ru: "ГКС (заместительная) · в/в, в/м", kk: "ГКС (орынбасар) · к/т", en: "Glucocorticoid (replacement) · IV, IM" } },
+  { id: "fludrocort",  name: "Флудрокортизон 0.1 мг",     cat: "endo", note: { ru: "Минералокортикоид · табл", kk: "Минералокортикоид · табл", en: "Mineralocorticoid · tab" } },
 ];
 
 /* ── Physical examination (vitals + findings) ───────────────── */

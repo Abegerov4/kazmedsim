@@ -389,6 +389,9 @@ export default function SessionPage() {
   const L = LABELS[lang];
 
   const lastPatientMsg = [...messages].reverse().find(m => m.role === "patient")?.text || "";
+  // Your most recent question — shown above the patient's reply so you can see
+  // the current Q→A exchange without leaving the chat for the record tab.
+  const lastStudentMsg = [...messages].reverse().find(m => m.role === "student")?.text || "";
 
   // Diagnosis options for this scenario, shuffled once per session
   const dxOptions = useMemo(() => {
@@ -611,7 +614,13 @@ export default function SessionPage() {
       {/* PATIENT + SPEECH BUBBLE CENTER */}
       <div className="absolute inset-0 flex flex-col items-center justify-end pb-24 pointer-events-none z-10">
         {/* Speech bubble */}
-        <div className="mb-4 pointer-events-auto shrink-0" style={{ maxWidth: 380 }}>
+        <div className="mb-4 pointer-events-auto shrink-0 flex flex-col items-stretch gap-1.5" style={{ maxWidth: 380 }}>
+          {lastStudentMsg && (
+            <div className="self-end px-3 py-1.5 rounded-xl text-[11px] max-w-[280px] truncate" title={lastStudentMsg}
+              style={{ background: "rgba(63,169,140,0.18)", border: "1px solid rgba(63,169,140,0.3)", color: "#9FE0E8" }}>
+              <span className="font-extrabold">{lang === "ru" ? "Вы" : lang === "kk" ? "Сіз" : "You"}:</span> {lastStudentMsg}
+            </div>
+          )}
           {(thinking || lastPatientMsg) && (
             <SpeechBubble text={lastPatientMsg} status={bubbleStatus} lang={lang} />
           )}
@@ -796,9 +805,10 @@ export default function SessionPage() {
                             </div>
                           )}
                           {sel && !lab && (
-                            <div className="mt-1 mb-1.5 ml-7 py-2 px-3 rounded-xl text-[11px]"
-                              style={{ background: "rgba(255,255,255,0.05)", color: "#7C94A0", border: "1px solid rgba(255,255,255,0.09)" }}>
-                              {L.noDeviation}
+                            <div className="mt-1 mb-1.5 ml-7 py-2 px-3 rounded-xl text-[11px] flex items-center gap-1.5"
+                              style={{ background: "rgba(232,168,75,0.14)", color: "#E8A84B", border: "1px solid rgba(232,168,75,0.35)" }}>
+                              <span>⚠</span>
+                              <span>{L.noDeviation} · {lang === "ru" ? "исследование не показано" : lang === "kk" ? "зерттеу көрсетілмеген" : "test not indicated"}</span>
                             </div>
                           )}
                         </div>
