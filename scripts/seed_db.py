@@ -5,7 +5,16 @@ import sqlite3
 import json
 import os
 
+from lab_guard import assert_not_vital
+
 DB_PATH = os.path.join(os.path.dirname(__file__), "..", "db", "kazmedsim.db")
+
+
+def _check_no_vital_labs(lab_results_json, slug=""):
+    """Reject any lab that duplicates a bedside vital (SpO₂, ЧСС, АД, ...)."""
+    for lab in json.loads(lab_results_json):
+        assert_not_vital(lab.get("name_ru", ""), slug)
+        assert_not_vital(lab.get("name_kk", ""), slug)
 
 SPECIALTY_LABELS = {
     "internal_medicine":  {"ru": "Терапия",               "kk": "Терапия"},
@@ -110,7 +119,6 @@ SCENARIOS = [
             {"name_ru": "СОЭ",           "name_kk": "ЭШЖ",           "value": 42,   "unit": "мм/ч",   "normal": "2-15",  "normal_min": 2,  "normal_max": 15},
             {"name_ru": "СРБ",           "name_kk": "СРБ",           "value": 87,   "unit": "мг/л",   "normal": "<5",    "normal_min": 0,  "normal_max": 5},
             {"name_ru": "Прокальцитонин","name_kk": "Прокальцитонин","value": 0.8,  "unit": "нг/мл",  "normal": "<0.5",  "normal_min": 0,  "normal_max": 0.5},
-            {"name_ru": "SpO2",          "name_kk": "SpO2",          "value": 94,   "unit": "%",       "normal": "95-100","normal_min": 95, "normal_max": 100},
             {"name_ru": "Рентген ОГК",   "name_kk": "Кеуде рентгені","value": "Инфильтрация в нижней доле правого лёгкого", "unit": "", "normal": "Лёгочный рисунок не изменён", "is_abnormal": True, "image_url": "/labs/bronchopneumonia.png"},
         ]),
         "correct_diagnosis_ru": "Внебольничная пневмония, средней тяжести, J18.9",
@@ -139,8 +147,6 @@ SCENARIOS = [
         "allergies_ru": "Нет",
         "allergies_kk": "Жоқ",
         "lab_results_json": json.dumps([
-            {"name_ru": "АД",         "name_kk": "АҚ",        "value": "192/114", "unit": "мм рт.ст.", "normal": "<140/90",    "is_abnormal": True},
-            {"name_ru": "ЧСС",        "name_kk": "ЖҮЖ",       "value": 94,        "unit": "уд/мин",    "normal": "60-90",      "normal_min": 60, "normal_max": 90},
             {"name_ru": "Креатинин",  "name_kk": "Креатинин", "value": 118,       "unit": "мкмоль/л",  "normal": "62-115",     "normal_min": 62, "normal_max": 115},
             {"name_ru": "Калий",      "name_kk": "Калий",     "value": 3.4,       "unit": "ммоль/л",   "normal": "3.5-5.0",    "normal_min": 3.5,"normal_max": 5.0},
             {"name_ru": "ЭКГ",        "name_kk": "ЭКГ",       "value": "Гипертрофия ЛЖ", "unit": "", "normal": "Норма", "is_abnormal": True, "image_url": "/labs/ecg_12lead.jpg"},
@@ -207,7 +213,6 @@ SCENARIOS = [
             {"name_ru": "Бактерии в моче",   "name_kk": "Несептегі бактериялар", "value": "Большое количество", "unit": "",         "normal": "Нет",          "is_abnormal": True},
             {"name_ru": "Нитриты",           "name_kk": "Нитриттер",            "value": "Положительно",       "unit": "",         "normal": "Отрицательно", "is_abnormal": True},
             {"name_ru": "Эритроциты в моче", "name_kk": "Несептегі эритроциттер","value": "5-8",               "unit": "в п/зр",  "normal": "0-3",          "is_abnormal": True},
-            {"name_ru": "Температура тела",  "name_kk": "Дене температурасы",   "value": 36.8,                "unit": "°C",        "normal": "36.0-37.0",    "normal_min": 36.0, "normal_max": 37.0},
         ]),
         "correct_diagnosis_ru": "Острый неосложнённый цистит, N30.0",
         "correct_diagnosis_kk": "Асқынбаған жедел цистит, N30.0",
@@ -241,7 +246,6 @@ SCENARIOS = [
             {"name_ru": "ЭКГ в покое",  "name_kk": "Тыныштықтағы ЭКГ","value": "Норма", "unit": "",   "normal": "Норма",   "is_abnormal": False, "image_url": "/labs/ecg_12lead.jpg"},
             {"name_ru": "Холестерин ЛПНП","name_kk": "ТТЛП холестерин","value": 4.2, "unit": "ммоль/л", "normal": "<2.6",   "normal_min": 0, "normal_max": 2.6},
             {"name_ru": "Глюкоза",      "name_kk": "Глюкоза",       "value": 5.8,  "unit": "ммоль/л",  "normal": "3.9-6.1", "normal_min": 3.9, "normal_max": 6.1},
-            {"name_ru": "АД",           "name_kk": "АҚ",            "value": "148/92", "unit": "мм рт.ст.", "normal": "<140/90", "is_abnormal": True},
         ]),
         "correct_diagnosis_ru": "ИБС: стабильная стенокардия напряжения II ФК, I20.9",
         "correct_diagnosis_kk": "ЖИА: II ФК тұрақты стенокардия, I20.9",
@@ -273,7 +277,6 @@ SCENARIOS = [
             {"name_ru": "Натрий",   "name_kk": "Натрий",     "value": 132,  "unit": "ммоль/л",  "normal": "136-145","normal_min": 136,"normal_max": 145},
             {"name_ru": "Креатинин","name_kk": "Креатинин",  "value": 142,  "unit": "мкмоль/л", "normal": "44-97", "normal_min": 44, "normal_max": 97},
             {"name_ru": "ЭКГ",      "name_kk": "ЭКГ",        "value": "Фибрилляция предсердий", "unit": "", "normal": "Синусовый ритм", "is_abnormal": True, "image_url": "/labs/ecg_12lead.jpg"},
-            {"name_ru": "SpO2",     "name_kk": "SpO2",       "value": 91,   "unit": "%",         "normal": "95-100","normal_min": 95, "normal_max": 100},
             {"name_ru": "Рентген ОГК","name_kk": "Кеуде рентгені","value": "Кардиомегалия, застойные явления в лёгких", "unit": "", "normal": "Норма", "is_abnormal": True, "image_url": "/labs/cardiomegaly.png"},
         ]),
         "correct_diagnosis_ru": "ХСН II-III ФК (NYHA), систолическая дисфункция, I50.9",
@@ -304,7 +307,6 @@ SCENARIOS = [
         "allergies_ru": "Нет",
         "allergies_kk": "Жоқ",
         "lab_results_json": json.dumps([
-            {"name_ru": "SpO2",        "name_kk": "SpO2",        "value": 88,   "unit": "%",             "normal": "95-100", "normal_min": 95, "normal_max": 100},
             {"name_ru": "Лейкоциты",   "name_kk": "Лейкоциттер", "value": 13.8, "unit": "×10⁹/л",        "normal": "4-9",   "normal_min": 4,  "normal_max": 9},
             {"name_ru": "СРБ",         "name_kk": "СРБ",         "value": 64,   "unit": "мг/л",           "normal": "<5",    "normal_min": 0,  "normal_max": 5},
             {"name_ru": "pCO2",        "name_kk": "pCO2",        "value": 52,   "unit": "мм рт.ст.",      "normal": "35-45", "normal_min": 35, "normal_max": 45},
@@ -408,7 +410,6 @@ SCENARIOS = [
         "allergies_kk": "Жоқ",
         "lab_results_json": json.dumps([
             {"name_ru": "Неврологический осмотр","name_kk": "Неврологиялық тексеру","value": "Без патологии","unit": "","normal": "Норма","is_abnormal": False},
-            {"name_ru": "АД",                    "name_kk": "АҚ",                  "value": "118/74",      "unit": "мм рт.ст.", "normal": "<140/90", "is_abnormal": False},
             {"name_ru": "Общий анализ крови",    "name_kk": "ЖАН",                 "value": "Норма",       "unit": "", "normal": "Норма", "is_abnormal": False},
             {"name_ru": "МРТ головного мозга",   "name_kk": "Бас мидың МРТ",       "value": "Не требуется при типичной клинике", "unit": "", "normal": "-", "is_abnormal": False},
         ]),
@@ -468,7 +469,6 @@ EXISTING_UPDATES = {
             {"name_ru": "СОЭ",           "name_kk": "ЭШЖ",           "value": 48,   "unit": "мм/ч",    "normal": "2-15",   "normal_min": 2,  "normal_max": 15},
             {"name_ru": "СРБ",           "name_kk": "СРБ",           "value": 124,  "unit": "мг/л",    "normal": "<5",     "normal_min": 0,  "normal_max": 5},
             {"name_ru": "Прокальцитонин","name_kk": "Прокальцитонин","value": 2.4,  "unit": "нг/мл",   "normal": "<0.5",   "normal_min": 0,  "normal_max": 0.5},
-            {"name_ru": "SpO₂",          "name_kk": "SpO₂",          "value": 92,   "unit": "%",        "normal": "95-100", "normal_min": 95, "normal_max": 100},
             {"name_ru": "Рентген ОГК",   "name_kk": "Кеуде рентгені","value": "Долевое затемнение в нижних отделах правого лёгкого", "unit": "", "normal": "Лёгочный рисунок не изменён", "is_abnormal": True, "image_url": "/labs/pneumonia_lobar.jpg"},
         ]),
     },
@@ -499,6 +499,13 @@ def _migrate(cur):
 def seed():
     conn = sqlite3.connect(DB_PATH)
     cur = conn.cursor()
+
+    # Fail fast if any scenario tries to put a vital sign into the labs list.
+    for slug, fields in EXISTING_UPDATES.items():
+        if "lab_results_json" in fields:
+            _check_no_vital_labs(fields["lab_results_json"], slug)
+    for s in SCENARIOS:
+        _check_no_vital_labs(s["lab_results_json"], s["slug"])
 
     _migrate(cur)
 
