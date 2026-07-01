@@ -42,7 +42,7 @@ def _now_iso() -> str:
 
 
 def _price_for(model: str) -> dict[str, float]:
-    return PRICES.get(model, PRICES["claude-sonnet-4-6"])  # safe default
+    return PRICES.get(model, PRICES["gpt-4o-mini"])  # safe default
 
 
 def _cost_usd(model: str, input_tokens: int, output_tokens: int,

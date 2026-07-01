@@ -9,9 +9,13 @@ import json
 
 from backend.scenarios import get_scenario, get_all_scenarios
 from backend.grader import grade_session
-from backend.telemetry import record_anthropic, record_openai
+from backend.telemetry import record_openai
 
 load_dotenv(".env.local")
+
+# Model that role-plays the simulated patient (text mode). gpt-4o-mini keeps
+# cost low; bump to "gpt-4o" if you want stronger persona consistency.
+PATIENT_MODEL = "gpt-4o-mini"
 
 
 # ── i18n helpers ────────────────────────────────────────────────────────────
@@ -140,7 +144,7 @@ def list_scenarios(lang: str = "ru", difficulty: str | None = None, specialty: s
 
 @app.post("/api/session/start")
 def start_session(req: StartSessionRequest):
-    from anthropic import Anthropic
+    from openai import OpenAI
 
     lang = _norm_lang(req.language)
     scenario = get_scenario(req.scenario_id, lang)
@@ -167,21 +171,19 @@ def start_session(req: StartSessionRequest):
         )
 
     import time as _t
-    client = Anthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
+    client = OpenAI(api_key=os.environ["OPENAI_API_KEY"])
     _t0 = _t.time()
-    intro = client.messages.create(
-        model="claude-sonnet-4-6",
+    intro = client.chat.completions.create(
+        model=PATIENT_MODEL,
         max_tokens=300,
-        # cache_control: subsequent turns of the same session reuse this prompt
-        # (TTL 5 min). If the rendered prompt is below the 1024-token cache
-        # threshold this is a no-op — Anthropic just ignores the marker.
-        system=[{"type": "text", "text": system_prompt,
-                 "cache_control": {"type": "ephemeral"}}],
-        messages=[{"role": "user", "content": _OPENING_LINE[lang]}],
+        messages=[
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": _OPENING_LINE[lang]},
+        ],
     )
-    record_anthropic("patient_start", "claude-sonnet-4-6", intro, _t0,
-                     session_id=session_id, language=lang)
-    patient_intro = intro.content[0].text
+    record_openai("patient_start", PATIENT_MODEL, intro, _t0,
+                  session_id=session_id, language=lang)
+    patient_intro = intro.choices[0].message.content or ""
 
     db.execute(
         "INSERT INTO dialog_log (session_id, role, message) VALUES (?, ?, ?)",
@@ -198,11 +200,11 @@ def send_message(req: MessageRequest):
     """Stream the patient's reply token-by-token as Server-Sent Events.
 
     Each event looks like `data: {"delta": "..."}\\n\\n`, with a final
-    `data: {"done": true}\\n\\n` once Anthropic finishes the response.
+    `data: {"done": true}\\n\\n` once OpenAI finishes the response.
     The student turn is written to dialog_log up-front so transcripts
     are consistent even if the client drops mid-stream.
     """
-    from anthropic import Anthropic
+    from openai import OpenAI
 
     db = get_db()
     session = db.execute("SELECT * FROM sessions WHERE id = ?", (req.session_id,)).fetchone()
@@ -229,14 +231,10 @@ def send_message(req: MessageRequest):
             language=_LANG_LABEL[lang],
         )
 
-    messages: list[dict] = []
+    messages: list[dict] = [{"role": "system", "content": system_prompt}]
     for log in logs:
         role = "assistant" if log["role"] == "patient" else "user"
         messages.append({"role": role, "content": log["message"]})
-    if messages:
-        last = messages[-1]
-        last["content"] = [{"type": "text", "text": last["content"],
-                            "cache_control": {"type": "ephemeral"}}]
     messages.append({"role": "user", "content": req.message})
 
     # Persist the student turn now so the dialog log stays consistent
@@ -252,21 +250,28 @@ def send_message(req: MessageRequest):
 
     def event_stream():
         import time as _t
-        client = Anthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
+        client = OpenAI(api_key=os.environ["OPENAI_API_KEY"])
         _t0 = _t.time()
         chunks: list[str] = []
+        final = None  # last chunk carries usage when include_usage is set
         try:
-            with client.messages.stream(
-                model="claude-sonnet-4-6",
+            stream = client.chat.completions.create(
+                model=PATIENT_MODEL,
                 max_tokens=400,
-                system=[{"type": "text", "text": system_prompt,
-                         "cache_control": {"type": "ephemeral"}}],
                 messages=messages,
-            ) as stream:
-                for delta in stream.text_stream:
+                stream=True,
+                stream_options={"include_usage": True},
+            )
+            for chunk in stream:
+                # The usage-bearing final chunk has an empty `choices` list.
+                if chunk.usage is not None:
+                    final = chunk
+                if not chunk.choices:
+                    continue
+                delta = chunk.choices[0].delta.content or ""
+                if delta:
                     chunks.append(delta)
                     yield f"data: {json.dumps({'delta': delta}, ensure_ascii=False)}\n\n"
-                final = stream.get_final_message()
         except Exception as e:
             yield f"data: {json.dumps({'error': str(e)})}\n\n"
             return
@@ -281,9 +286,9 @@ def send_message(req: MessageRequest):
         )
         db2.commit()
         db2.close()
-        record_anthropic("patient_message", "claude-sonnet-4-6", final, _t0,
-                         session_id=req.session_id, language=lang,
-                         turn=turn_index)
+        record_openai("patient_message", PATIENT_MODEL, final, _t0,
+                       session_id=req.session_id, language=lang,
+                       turn=turn_index)
 
         yield f"data: {json.dumps({'done': True})}\n\n"
 

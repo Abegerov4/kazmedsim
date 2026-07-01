@@ -1,18 +1,23 @@
-"""Session grader — uses Anthropic tool-use for structured output.
+"""Session grader — uses OpenAI function-calling for structured output.
 
-Why tool-use instead of regex parsing:
+Why function-calling instead of regex parsing:
     Free-form markdown output drifts (rubric headers rename across languages,
     score formatting changes "8/10" → "8 из 10" → "8 баллов") and the regex
     that used to extract scores broke every time we touched the prompt.
 
-    With a forced tool call, Claude must return a typed JSON object that the
-    Anthropic API validates against our schema, so parsing is bulletproof.
+    With a forced tool call, the model must return a typed JSON object that
+    matches our schema, so parsing is bulletproof.
 """
+import json
 import os
 import time
-from anthropic import Anthropic
+from openai import OpenAI
 
-from backend.telemetry import record_anthropic
+from backend.telemetry import record_openai
+
+# Model used to grade the completed appointment. Bump to "gpt-4o" for tougher,
+# more consistent scoring at higher cost.
+GRADER_MODEL = "gpt-4o-mini"
 
 # Marker that splits each grader_*.txt into a STATIC top half (rubric rules +
 # format spec — cached) and a DYNAMIC bottom half (transcript + anchors).
@@ -23,45 +28,48 @@ CASE_MARKER = "[CASE]"
 
 # Each rubric returns three keys: score 0-10, "what went well", "what to
 # improve". The grader's free-form Summary + Recommendation are top-level.
-# We don't constrain language here — the grader prompt instructs Claude which
-# language to write the prose in (ru | kk | en).
+# We don't constrain language here — the grader prompt instructs the model
+# which language to write the prose in (ru | kk | en).
 
 GRADE_TOOL = {
-    "name": "submit_grade",
-    "description": (
-        "Submit the final rubric grades and feedback for the student's "
-        "simulated appointment. Always call this tool exactly once."
-    ),
-    "input_schema": {
-        "type": "object",
-        "properties": {
-            "summary":               {"type": "string"},
-            "anamnesis_score":       {"type": "integer", "minimum": 0, "maximum": 10},
-            "anamnesis_done":        {"type": "string"},
-            "anamnesis_improve":     {"type": "string"},
-            "communication_score":   {"type": "integer", "minimum": 0, "maximum": 10},
-            "communication_done":    {"type": "string"},
-            "communication_improve": {"type": "string"},
-            "reasoning_score":       {"type": "integer", "minimum": 0, "maximum": 10},
-            "reasoning_done":        {"type": "string"},
-            "reasoning_improve":     {"type": "string"},
-            "diagnosis_score":       {"type": "integer", "minimum": 0, "maximum": 10},
-            "diagnosis_done":        {"type": "string"},
-            "diagnosis_improve":     {"type": "string"},
-            "treatment_score":       {"type": "integer", "minimum": 0, "maximum": 10},
-            "treatment_done":        {"type": "string"},
-            "treatment_improve":     {"type": "string"},
-            "recommendation":        {"type": "string"},
+    "type": "function",
+    "function": {
+        "name": "submit_grade",
+        "description": (
+            "Submit the final rubric grades and feedback for the student's "
+            "simulated appointment. Always call this tool exactly once."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "summary":               {"type": "string"},
+                "anamnesis_score":       {"type": "integer", "minimum": 0, "maximum": 10},
+                "anamnesis_done":        {"type": "string"},
+                "anamnesis_improve":     {"type": "string"},
+                "communication_score":   {"type": "integer", "minimum": 0, "maximum": 10},
+                "communication_done":    {"type": "string"},
+                "communication_improve": {"type": "string"},
+                "reasoning_score":       {"type": "integer", "minimum": 0, "maximum": 10},
+                "reasoning_done":        {"type": "string"},
+                "reasoning_improve":     {"type": "string"},
+                "diagnosis_score":       {"type": "integer", "minimum": 0, "maximum": 10},
+                "diagnosis_done":        {"type": "string"},
+                "diagnosis_improve":     {"type": "string"},
+                "treatment_score":       {"type": "integer", "minimum": 0, "maximum": 10},
+                "treatment_done":        {"type": "string"},
+                "treatment_improve":     {"type": "string"},
+                "recommendation":        {"type": "string"},
+            },
+            "required": [
+                "summary",
+                "anamnesis_score", "anamnesis_done", "anamnesis_improve",
+                "communication_score", "communication_done", "communication_improve",
+                "reasoning_score", "reasoning_done", "reasoning_improve",
+                "diagnosis_score", "diagnosis_done", "diagnosis_improve",
+                "treatment_score", "treatment_done", "treatment_improve",
+                "recommendation",
+            ],
         },
-        "required": [
-            "summary",
-            "anamnesis_score", "anamnesis_done", "anamnesis_improve",
-            "communication_score", "communication_done", "communication_improve",
-            "reasoning_score", "reasoning_done", "reasoning_improve",
-            "diagnosis_score", "diagnosis_done", "diagnosis_improve",
-            "treatment_score", "treatment_done", "treatment_improve",
-            "recommendation",
-        ],
     },
 }
 
@@ -201,34 +209,34 @@ def grade_session(
         "Do not respond with prose — only call the tool."
     )
 
-    # Two content blocks: static (cached, identical across calls in the same
-    # language) and dynamic (per-call case data). Anthropic caches the prefix
-    # up to and including the block marked with cache_control.
-    user_content = [
-        {"type": "text", "text": static_part.strip(),
-         "cache_control": {"type": "ephemeral"}},
-        {"type": "text", "text": dynamic_msg},
-    ]
+    # Static rubric rules + format spec, then the per-call case data. OpenAI
+    # applies prompt caching automatically to the shared prefix, so keeping the
+    # static rubric first still earns the cache discount across calls.
+    user_text = static_part.strip() + "\n\n" + dynamic_msg
 
-    client = Anthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
+    client = OpenAI(api_key=os.environ["OPENAI_API_KEY"])
     t0 = time.time()
-    response = client.messages.create(
-        model="claude-sonnet-4-6",
+    response = client.chat.completions.create(
+        model=GRADER_MODEL,
         max_tokens=4000,
         temperature=0.2,
         tools=[GRADE_TOOL],
-        tool_choice={"type": "tool", "name": "submit_grade"},
-        messages=[{"role": "user", "content": user_content}],
+        tool_choice={"type": "function", "function": {"name": "submit_grade"}},
+        messages=[{"role": "user", "content": user_text}],
     )
-    record_anthropic("grader", "claude-sonnet-4-6", response, t0,
-                     language=language)
+    record_openai("grader", GRADER_MODEL, response, t0,
+                  language=language)
 
-    # Find the tool_use block (Anthropic guarantees it when tool_choice is
+    # Parse the forced tool call (OpenAI guarantees it when tool_choice is
     # forced, but we still defend against an unexpected text-only reply).
     data = None
-    for block in response.content:
-        if getattr(block, "type", None) == "tool_use" and block.name == "submit_grade":
-            data = block.input
+    msg = response.choices[0].message
+    for tc in (msg.tool_calls or []):
+        if tc.function.name == "submit_grade":
+            try:
+                data = json.loads(tc.function.arguments)
+            except (json.JSONDecodeError, TypeError):
+                data = None
             break
     if data is None:
         # Extremely defensive fallback: return mid scores so the UI doesn't break
