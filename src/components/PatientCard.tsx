@@ -1,5 +1,8 @@
 "use client";
 
+import { motion } from "motion/react";
+import { SpotlightCard } from "@/components/ui/spotlight-card";
+
 type Difficulty = "easy" | "medium" | "hard";
 type Urgency = "routine" | "urgent";
 type Lang = "ru" | "kk" | "en";
@@ -69,16 +72,20 @@ export function PatientCard({ scenario: s, lang, onStart, loading }: Props) {
   const ageLabel = lang === "ru" ? "лет" : lang === "kk" ? "жас" : "yrs";
 
   return (
-    <div
-      className="group flex flex-col rounded-[var(--r-lg)] overflow-hidden transition-all duration-200 hover:-translate-y-1"
-      style={{
-        background: "var(--surface)",
-        border: "1px solid var(--border-soft)",
-        boxShadow: "var(--shadow-sm)",
-      }}
-      onMouseEnter={(e) => (e.currentTarget.style.boxShadow = "var(--shadow-lg)")}
-      onMouseLeave={(e) => (e.currentTarget.style.boxShadow = "var(--shadow-sm)")}
+    <motion.div
+      className="h-full"
+      initial={{ opacity: 0, y: 22, scale: 0.97 }}
+      whileInView={{ opacity: 1, y: 0, scale: 1 }}
+      viewport={{ once: true, margin: "-40px" }}
+      whileHover={{ y: -6 }}
+      transition={{ type: "spring", stiffness: 260, damping: 24 }}
     >
+    <SpotlightCard
+      spotlightColor={hexA(color, "22")}
+      className="group h-full flex flex-col rounded-[var(--r-lg)] transition-shadow duration-300 hover:shadow-[var(--shadow-lg)]"
+    >
+    <div className="flex flex-col h-full rounded-[var(--r-lg)] overflow-hidden"
+      style={{ background: "var(--surface)", border: "1px solid var(--border-soft)", boxShadow: "var(--shadow-sm)" }}>
       {/* Header band */}
       <div className="relative px-4 pt-4 pb-3"
         style={{ background: `linear-gradient(150deg, ${hexA(color, "1F")}, ${hexA(color, "08")})` }}>
@@ -91,7 +98,7 @@ export function PatientCard({ scenario: s, lang, onStart, loading }: Props) {
         )}
 
         <div className="flex items-center gap-3">
-          <div className="grid place-items-center shrink-0 rounded-2xl text-white font-extrabold text-base"
+          <div className="grid place-items-center shrink-0 rounded-2xl text-white font-extrabold text-base transition-transform duration-300 group-hover:scale-110 group-hover:-rotate-6"
             style={{ width: 46, height: 46, background: color, boxShadow: `0 8px 16px -6px ${color}` }}>
             {getInitials(s.patient_name)}
           </div>
@@ -148,10 +155,12 @@ export function PatientCard({ scenario: s, lang, onStart, loading }: Props) {
           {loading ? (
             <><span className="anim-spin inline-block w-3.5 h-3.5 rounded-full border-2 border-white/40 border-t-white" /> {loadingLabel}</>
           ) : (
-            <>{startLabel} →</>
+            <>{startLabel} <span className="transition-transform duration-300 group-hover:translate-x-1">→</span></>
           )}
         </button>
       </div>
     </div>
+    </SpotlightCard>
+    </motion.div>
   );
 }

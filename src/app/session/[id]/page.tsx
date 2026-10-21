@@ -49,6 +49,11 @@ const LABELS = {
     overtime: "Переработка",
     timeUp: "Время вышло — завершите приём",
     voice: "Голос",
+    history: "История",
+    historyTitle: "История приёма",
+    you: "Вы",
+    patient: "Пациент",
+    hotkeys: "Клавиши: / — ввод, 1–4 — инструменты, H — история, V — голос, Esc — закрыть",
   },
   kk: {
     back: "← Кезек",
@@ -89,6 +94,11 @@ const LABELS = {
     overtime: "Уақыттан асу",
     timeUp: "Уақыт бітті — қабылдауды аяқтаңыз",
     voice: "Дауыс",
+    history: "Тарих",
+    historyTitle: "Қабылдау тарихы",
+    you: "Сіз",
+    patient: "Науқас",
+    hotkeys: "Пернелер: / — енгізу, 1–4 — құралдар, H — тарих, V — дауыс, Esc — жабу",
   },
   en: {
     back: "← Queue",
@@ -129,6 +139,11 @@ const LABELS = {
     overtime: "Overtime",
     timeUp: "Time's up — finish the appointment",
     voice: "Voice",
+    history: "History",
+    historyTitle: "Encounter history",
+    you: "You",
+    patient: "Patient",
+    hotkeys: "Keys: / — type, 1–4 — tools, H — history, V — voice, Esc — close",
   },
 };
 
@@ -385,7 +400,12 @@ export default function SessionPage() {
   const [listening, setListening] = useState(false);
   const [elapsedSec, setElapsedSec] = useState(0);
   const [voiceOpen, setVoiceOpen] = useState(false);
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const [hudHeight, setHudHeight] = useState(112);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const hudRef = useRef<HTMLDivElement>(null);
+  const historyEndRef = useRef<HTMLDivElement>(null);
+  const hotkeyRef = useRef<(e: KeyboardEvent) => void>(() => {});
   const L = LABELS[lang];
 
   const lastPatientMsg = [...messages].reverse().find(m => m.role === "patient")?.text || "";
@@ -450,6 +470,49 @@ export default function SessionPage() {
     const t = setInterval(() => setElapsedSec((s) => s + 1), 1000);
     return () => clearInterval(t);
   }, [scenario, ending]);
+
+  // Panels anchor to the top of the bottom HUD, which grows with the textarea.
+  useEffect(() => {
+    const el = hudRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver(() => setHudHeight(el.offsetHeight));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [scenario]);
+
+  useEffect(() => {
+    if (historyOpen) historyEndRef.current?.scrollIntoView({ block: "end" });
+  }, [historyOpen, messages]);
+
+  // Keyboard shortcuts. The handler is refreshed every render so it always
+  // sees current state; the listener itself is attached once.
+  useEffect(() => {
+    hotkeyRef.current = (e: KeyboardEvent) => {
+      if (voiceOpen || e.metaKey || e.ctrlKey || e.altKey) return;
+      const t = e.target as HTMLElement | null;
+      const typing = !!t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.isContentEditable);
+      if (e.key === "Escape") {
+        if (typing) t.blur();
+        setHistoryOpen(false);
+        setRightPanel(null);
+        return;
+      }
+      if (typing) return;
+      const k = e.key.toLowerCase();
+      if (e.key === "/") { e.preventDefault(); inputRef.current?.focus(); }
+      else if (e.key === "1") setRightPanel(rightPanel === "record" ? null : "record");
+      else if (e.key === "2") openExam();
+      else if (e.key === "3") { if (!labsLoading) handleOrderLabs(); }
+      else if (e.key === "4") setRightPanel(rightPanel === "diagnosis" ? null : "diagnosis");
+      else if (k === "h" || k === "р") setHistoryOpen((o) => !o);
+      else if ((k === "v" || k === "м") && !thinking) setVoiceOpen(true);
+    };
+  });
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => hotkeyRef.current(e);
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
 
   async function handleSend() {
     const msg = input.trim();
@@ -612,7 +675,7 @@ export default function SessionPage() {
       </div>
 
       {/* PATIENT + SPEECH BUBBLE CENTER */}
-      <div className="absolute inset-0 flex flex-col items-center justify-end pb-24 pointer-events-none z-10">
+      <div className="absolute inset-0 flex flex-col items-center justify-end pb-28 pointer-events-none z-10">
         {/* Speech bubble */}
         <div className="mb-4 pointer-events-auto shrink-0 flex flex-col items-stretch gap-1.5" style={{ maxWidth: 380 }}>
           {lastStudentMsg && (
@@ -652,8 +715,8 @@ export default function SessionPage() {
 
       {/* RIGHT PANEL (slide-in) */}
       <div
-        className="absolute top-[52px] right-0 bottom-[88px] z-30 transition-all duration-300"
-        style={{ width: rightPanel ? 372 : 0, overflow: "hidden" }}
+        className="absolute top-[52px] right-0 z-30 transition-all duration-300"
+        style={{ width: rightPanel ? 372 : 0, overflow: "hidden", bottom: hudHeight }}
       >
         <div
           className="h-full w-[372px] overflow-y-auto"
@@ -944,113 +1007,173 @@ export default function SessionPage() {
         </div>
       </div>
 
+      {/* HISTORY DRAWER — full transcript, slides up from the HUD */}
+      <div
+        className="absolute left-1/2 z-[25] w-[min(760px,calc(100vw-24px))] transition-all duration-300"
+        style={{
+          bottom: hudHeight + 8,
+          opacity: historyOpen ? 1 : 0,
+          transform: `translateX(-50%) translateY(${historyOpen ? 0 : 16}px)`,
+          pointerEvents: historyOpen ? "auto" : "none",
+        }}
+        aria-hidden={!historyOpen}
+      >
+        <div className="rounded-2xl overflow-hidden"
+          style={{ background: "rgba(13,23,29,0.94)", backdropFilter: "blur(14px)", border: "1px solid rgba(52,169,188,0.25)", boxShadow: "0 24px 48px -16px rgba(0,0,0,.55)" }}>
+          <div className="flex items-center justify-between px-4 py-2.5" style={{ borderBottom: "1px solid rgba(52,169,188,0.15)" }}>
+            <span className="text-xs font-extrabold tracking-wide" style={{ color: "#D6ECEE" }}>
+              {L.historyTitle} · {messages.length}
+            </span>
+            <button onClick={() => setHistoryOpen(false)} aria-label="Esc"
+              className="text-[11px] font-bold px-2 py-1 rounded-lg hover:brightness-125"
+              style={{ color: "#7C94A0", background: "rgba(255,255,255,0.06)" }}>
+              Esc ✕
+            </button>
+          </div>
+          <div className="overflow-y-auto px-4 py-3 space-y-2.5" style={{ maxHeight: "min(46vh, 420px)" }}>
+            {messages.map((m, i) => {
+              const mine = m.role === "student";
+              return (
+                <div key={i} className={`flex ${mine ? "justify-end" : "justify-start"}`}>
+                  <div className="max-w-[80%] px-3.5 py-2 rounded-2xl text-[13px] leading-snug select-text"
+                    style={mine
+                      ? { background: "linear-gradient(140deg,#2A9BB0,#115C6E)", color: "#fff", borderBottomRightRadius: 6 }
+                      : { background: "rgba(255,255,255,0.08)", color: "#EAF6F7", borderBottomLeftRadius: 6 }}>
+                    <div className="text-[10px] font-extrabold uppercase tracking-wide mb-0.5" style={{ opacity: 0.6 }}>
+                      {mine ? L.you : L.patient}
+                    </div>
+                    {m.text || "…"}
+                  </div>
+                </div>
+              );
+            })}
+            <div ref={historyEndRef} />
+          </div>
+        </div>
+      </div>
+
       {/* BOTTOM HUD */}
       <div
-        className="absolute bottom-0 left-0 right-0 z-20 px-4 pt-3 pb-2.5"
+        ref={hudRef}
+        className="absolute bottom-0 left-0 right-0 z-20 px-3 sm:px-4 pt-3 pb-2.5"
         style={{ background: "rgba(13,23,29,0.94)", backdropFilter: "blur(12px)", borderTop: "1px solid rgba(52,169,188,0.18)" }}
       >
-        <div className="flex items-center gap-2.5 max-w-4xl mx-auto">
-          {/* Tool buttons */}
-          {([
-            { key: "record" as const, icon: "record", label: L.record, onClick: () => setRightPanel(rightPanel === "record" ? null : "record"), accent: "#34A9BC" },
-            { key: "exam" as const, icon: "vitals", label: L.examine, onClick: openExam, accent: "#34A9BC" },
-            { key: "labs" as const, icon: "labs", label: labsLoading ? L.loading : L.labs, onClick: handleOrderLabs, accent: "#34A9BC" },
-            { key: "diagnosis" as const, icon: "pill", label: L.diagnosis, onClick: () => setRightPanel(rightPanel === "diagnosis" ? null : "diagnosis"), accent: "#46C2A0" },
-          ]).map((b) => {
-            const active = rightPanel === b.key;
-            return (
-              <button key={b.key} onClick={b.onClick} disabled={b.key === "labs" && labsLoading}
-                className="inline-flex items-center gap-1.5 px-3 py-2.5 rounded-xl text-xs font-extrabold transition-all whitespace-nowrap hover:brightness-110 disabled:opacity-50"
-                style={{
-                  background: active ? b.accent : "rgba(255,255,255,0.06)",
-                  color: active ? "#fff" : "#9FE0E8",
-                  border: `1px solid ${active ? b.accent : "rgba(52,169,188,0.28)"}`,
-                  boxShadow: active ? `0 8px 18px -8px ${b.accent}` : "none",
-                }}>
-                <MedIcon name={b.icon} className="w-4 h-4 shrink-0" /> <span className="hidden md:inline">{b.label}</span>
-              </button>
-            );
-          })}
-
-          {/* Text input — auto-growing textarea so long questions wrap
-              vertically instead of scrolling sideways. Enter sends,
-              Shift+Enter inserts a newline. */}
-          <textarea
-            ref={inputRef}
-            value={input}
-            rows={1}
-            onChange={(e) => {
-              setInput(e.target.value);
-              setListening(e.target.value.length > 0);
-              const el = e.currentTarget;
-              el.style.height = "auto";
-              el.style.height = Math.min(el.scrollHeight, 140) + "px";
-            }}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && !e.shiftKey) {
-                e.preventDefault();
-                handleSend();
-                if (inputRef.current) inputRef.current.style.height = "auto";
-              }
-            }}
-            placeholder={L.placeholder}
-            disabled={thinking}
-            className="flex-1 px-4 py-2.5 rounded-xl text-sm focus:outline-none disabled:opacity-50 resize-none leading-snug"
-            style={{
-              background: "rgba(255,255,255,0.07)",
-              border: "1.5px solid rgba(52,169,188,0.3)",
-              color: "#EAF6F7",
-              minHeight: 42,
-              maxHeight: 140,
-              overflowY: "auto",
-            }}
-          />
-
-          {/* Voice mode toggle — opens OpenAI Realtime call with the patient */}
-          <button
-            onClick={() => setVoiceOpen(true)}
-            disabled={thinking || voiceOpen}
-            title={L.voice}
-            aria-label={L.voice}
-            className="px-3.5 py-2.5 rounded-xl text-xs font-extrabold transition-all whitespace-nowrap hover:brightness-110 disabled:opacity-40 inline-flex items-center gap-1.5"
-            style={{
-              background: "rgba(70,194,160,0.18)",
-              color: "#5FD0B0",
-              border: "1px solid rgba(70,194,160,0.4)",
-            }}
+        <div className="max-w-3xl mx-auto">
+          {/* Composer — full width; voice + send live inside the field */}
+          <div
+            className="flex items-end gap-1.5 pl-4 pr-1.5 py-1.5 rounded-2xl transition-shadow focus-within:shadow-[0_0_0_3px_rgba(52,169,188,0.25)]"
+            style={{ background: "rgba(255,255,255,0.07)", border: "1.5px solid rgba(52,169,188,0.32)" }}
           >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-              <rect x="9" y="3" width="6" height="12" rx="3" />
-              <path d="M5 11a7 7 0 0 0 14 0" />
-              <line x1="12" y1="18" x2="12" y2="22" />
-            </svg>
-            <span className="hidden md:inline">{L.voice}</span>
-          </button>
+            {/* Auto-growing textarea: Enter sends, Shift+Enter inserts a newline. */}
+            <textarea
+              ref={inputRef}
+              value={input}
+              rows={1}
+              onChange={(e) => {
+                setInput(e.target.value);
+                setListening(e.target.value.length > 0);
+                const el = e.currentTarget;
+                el.style.height = "auto";
+                el.style.height = Math.min(el.scrollHeight, 160) + "px";
+              }}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !e.shiftKey) {
+                  e.preventDefault();
+                  handleSend();
+                  if (inputRef.current) inputRef.current.style.height = "auto";
+                }
+              }}
+              placeholder={L.placeholder}
+              disabled={thinking}
+              className="flex-1 py-2 bg-transparent text-[15px] focus:outline-none disabled:opacity-50 resize-none leading-snug"
+              // The composer wrapper shows focus; suppress the global :focus-visible ring here.
+              style={{ color: "#EAF6F7", minHeight: 40, maxHeight: 160, overflowY: "auto", boxShadow: "none", borderRadius: 0 }}
+            />
 
-          <button
-            onClick={handleSend}
-            disabled={!input.trim() || thinking}
-            className="px-5 py-2.5 rounded-xl text-sm font-extrabold transition-all disabled:opacity-40 whitespace-nowrap hover:brightness-110"
-            style={{ background: "linear-gradient(140deg,#3BB6C9,#115C6E)", color: "#fff", boxShadow: "0 8px 18px -8px rgba(17,92,110,.8)" }}
-          >
-            {L.send} →
-          </button>
-        </div>
+            {/* Voice mode — OpenAI Realtime call with the patient */}
+            <button
+              onClick={() => setVoiceOpen(true)}
+              disabled={thinking || voiceOpen}
+              title={`${L.voice} (V)`}
+              aria-label={L.voice}
+              className="grid place-items-center shrink-0 w-10 h-10 rounded-xl transition-all hover:brightness-125 disabled:opacity-40"
+              style={{ background: "rgba(70,194,160,0.16)", color: "#5FD0B0", border: "1px solid rgba(70,194,160,0.35)" }}
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                <rect x="9" y="3" width="6" height="12" rx="3" />
+                <path d="M5 11a7 7 0 0 0 14 0" />
+                <line x1="12" y1="18" x2="12" y2="22" />
+              </svg>
+            </button>
 
-        {/* Status bar */}
-        <div className="flex items-center justify-center gap-4 mt-2">
-          <span className="text-[11px] font-bold tracking-wide">
-            {thinking ? (
-              <span style={{ color: "#E0A82E", animation: "pulse-dot 1s infinite" }}>● {L.thinking}</span>
-            ) : (
-              <span style={{ color: "#5E7782" }}>● {L.listening}</span>
-            )}
-          </span>
-          {overtime && (
-            <span className="text-[11px] font-extrabold tracking-wide" style={{ color: "#F08A75", animation: "pulse-dot 1s infinite" }}>
-              ⏱ {L.timeUp}
-            </span>
-          )}
+            <button
+              onClick={() => { handleSend(); if (inputRef.current) inputRef.current.style.height = "auto"; }}
+              disabled={!input.trim() || thinking}
+              title={`${L.send} (Enter)`}
+              aria-label={L.send}
+              className="grid place-items-center shrink-0 w-10 h-10 rounded-xl transition-all disabled:opacity-35 hover:brightness-110"
+              style={{ background: "linear-gradient(140deg,#3BB6C9,#115C6E)", color: "#fff", boxShadow: "0 8px 18px -8px rgba(17,92,110,.8)" }}
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M5 12h14M13 6l6 6-6 6" />
+              </svg>
+            </button>
+          </div>
+
+          {/* Tools row */}
+          <div className="flex items-center gap-1.5 mt-2">
+            {([
+              { key: "record" as const, hk: "1", icon: "record", label: L.record, onClick: () => setRightPanel(rightPanel === "record" ? null : "record"), accent: "#34A9BC" },
+              { key: "exam" as const, hk: "2", icon: "vitals", label: L.examine, onClick: openExam, accent: "#34A9BC" },
+              { key: "labs" as const, hk: "3", icon: "labs", label: labsLoading ? L.loading : L.labs, onClick: handleOrderLabs, accent: "#34A9BC" },
+              { key: "diagnosis" as const, hk: "4", icon: "pill", label: L.diagnosis, onClick: () => setRightPanel(rightPanel === "diagnosis" ? null : "diagnosis"), accent: "#46C2A0" },
+            ]).map((b) => {
+              const active = rightPanel === b.key;
+              return (
+                <button key={b.key} onClick={b.onClick} disabled={b.key === "labs" && labsLoading}
+                  title={`${b.label} (${b.hk})`}
+                  className="group inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-extrabold transition-all whitespace-nowrap hover:brightness-125 disabled:opacity-50"
+                  style={{
+                    background: active ? b.accent : "transparent",
+                    color: active ? "#fff" : "#9FE0E8",
+                    boxShadow: active ? `0 8px 18px -8px ${b.accent}` : "none",
+                  }}>
+                  <MedIcon name={b.icon} className="w-4 h-4 shrink-0" />
+                  <span className="hidden sm:inline">{b.label}</span>
+                  <kbd className="hidden lg:inline text-[10px] font-bold px-1 rounded"
+                    style={{ background: "rgba(255,255,255,0.08)", color: active ? "#fff" : "#5E7782" }}>{b.hk}</kbd>
+                </button>
+              );
+            })}
+
+            <button onClick={() => setHistoryOpen((o) => !o)}
+              title={`${L.history} (H)`}
+              className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-extrabold transition-all whitespace-nowrap hover:brightness-125"
+              style={{
+                background: historyOpen ? "rgba(52,169,188,0.22)" : "transparent",
+                color: "#9FE0E8",
+              }}>
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M21 12a8 8 0 0 1-11.8 7L4 20l1.1-4.6A8 8 0 1 1 21 12z" />
+              </svg>
+              <span className="hidden sm:inline">{L.history}</span>
+              <span className="text-[10px] font-extrabold px-1.5 rounded-full" style={{ background: "rgba(52,169,188,0.25)" }}>{messages.length}</span>
+            </button>
+
+            {/* Status */}
+            <div className="ml-auto flex items-center gap-3 text-[11px] font-bold tracking-wide" title={L.hotkeys}>
+              {overtime && (
+                <span className="hidden md:inline font-extrabold" style={{ color: "#F08A75", animation: "pulse-dot 1s infinite" }}>
+                  ⏱ {L.timeUp}
+                </span>
+              )}
+              {thinking ? (
+                <span style={{ color: "#E0A82E", animation: "pulse-dot 1s infinite" }}>● {L.thinking}</span>
+              ) : (
+                <span style={{ color: "#5E7782" }}>● {L.listening}</span>
+              )}
+            </div>
+          </div>
         </div>
       </div>
 

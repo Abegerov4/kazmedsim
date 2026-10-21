@@ -6,6 +6,9 @@ import { fetchScenarios, startSession } from "@/lib/api";
 import { PatientCard, type PatientScenario } from "@/components/PatientCard";
 import { MedIcon } from "@/components/MedIcon";
 import { AssistantChat } from "@/components/AssistantChat";
+import { motion } from "motion/react";
+import { Aurora } from "@/components/ui/aurora";
+import { ShimmerText } from "@/components/ui/shimmer-text";
 
 type Lang = "ru" | "kk" | "en";
 
@@ -126,10 +129,11 @@ export default function PatientsPage() {
   const total = scenarios.length;
 
   return (
-    <div className="min-h-screen app-bg pb-16">
+    <Aurora className="min-h-screen pb-16 overflow-visible" style={{ background: "var(--bg)" }} intensity={0.22} duration={30}>
+      <div aria-hidden className="dot-grid fixed inset-0 -z-10" />
       {/* Header */}
-      <header className="sticky top-0 z-30 backdrop-blur"
-        style={{ background: "rgba(255,255,255,.86)", borderBottom: "1px solid var(--border)" }}>
+      <header className="sticky top-0 z-30 glass"
+        style={{ borderBottom: "1px solid var(--border-soft)" }}>
         <div className="max-w-7xl mx-auto flex items-center justify-between gap-3 px-4 sm:px-6 py-3">
           <div className="flex items-center gap-3 min-w-0">
             <button onClick={() => router.push("/")}
@@ -138,8 +142,8 @@ export default function PatientsPage() {
             </button>
             <div className="hidden sm:block w-px h-8" style={{ background: "var(--border)" }} />
             <div className="min-w-0">
-              <h1 className="font-extrabold text-[17px] tracking-tight truncate" style={{ color: "var(--ink)" }}>
-                {L.title}
+              <h1 className="font-display font-semibold text-[18px] truncate">
+                <ShimmerText duration={4}>{L.title}</ShimmerText>
               </h1>
               <p className="text-xs font-medium truncate" style={{ color: "var(--ink-soft)" }}>
                 {L.subtitle}
@@ -161,12 +165,14 @@ export default function PatientsPage() {
               {(["ru", "kk", "en"] as Lang[]).map((l) => (
                 <button key={l}
                   onClick={() => { setLang(l); localStorage.setItem("kms_lang", l); }}
-                  className="px-2.5 py-1.5 rounded-lg text-xs font-extrabold transition-all"
-                  style={{
-                    background: lang === l ? "var(--primary)" : "transparent",
-                    color: lang === l ? "#fff" : "var(--ink-soft)",
-                  }}>
-                  {l === "ru" ? "RU" : l === "kk" ? "KZ" : "EN"}
+                  className="relative px-2.5 py-1.5 rounded-lg text-xs font-extrabold"
+                  style={{ color: lang === l ? "#fff" : "var(--ink-soft)" }}>
+                  {lang === l && (
+                    <motion.span layoutId="patients-lang-pill" className="absolute inset-0 rounded-lg"
+                      style={{ background: "var(--primary)" }}
+                      transition={{ type: "spring", stiffness: 420, damping: 32 }} />
+                  )}
+                  <span className="relative">{l === "ru" ? "RU" : l === "kk" ? "KZ" : "EN"}</span>
                 </button>
               ))}
             </div>
@@ -179,15 +185,19 @@ export default function PatientsPage() {
             const active = filter === sp.slug;
             return (
               <button key={sp.slug} onClick={() => setFilter(sp.slug)}
-                className="chip px-3.5 py-1.5 text-xs shrink-0"
+                className="chip relative px-3.5 py-1.5 text-xs shrink-0"
                 style={{
-                  background: active ? "var(--primary)" : "var(--surface)",
+                  background: "var(--surface)",
                   color: active ? "#fff" : "var(--ink-soft)",
-                  border: `1.5px solid ${active ? "var(--primary)" : "var(--border)"}`,
-                  boxShadow: active ? "0 6px 14px -6px rgba(17,92,110,.5)" : "none",
+                  border: "1.5px solid var(--border)",
                 }}>
-                <MedIcon name={sp.icon} className="w-4 h-4" />
-                <span>{sp[lang]}</span>
+                {active && (
+                  <motion.span layoutId="specialty-pill" className="absolute -inset-[1.5px] rounded-full"
+                    style={{ background: "linear-gradient(140deg, var(--primary-bright), var(--primary-deep))", boxShadow: "0 6px 14px -6px rgba(17,92,110,.6)" }}
+                    transition={{ type: "spring", stiffness: 380, damping: 30 }} />
+                )}
+                <MedIcon name={sp.icon} className="w-4 h-4 relative" />
+                <span className="relative">{sp[lang]}</span>
               </button>
             );
           })}
@@ -216,7 +226,7 @@ export default function PatientsPage() {
                   style={{ width: 38, height: 38, background: "var(--surface)", border: "1px solid var(--border-soft)", boxShadow: "var(--shadow-sm)", color: "var(--primary)" }}>
                   <MedIcon name={group.icon} className="w-5 h-5" />
                 </span>
-                <h2 className="text-[17px] font-extrabold tracking-tight" style={{ color: "var(--ink)" }}>
+                <h2 className="font-display text-[17px] font-semibold" style={{ color: "var(--ink)" }}>
                   {group.label}
                 </h2>
                 <span className="text-[11px] font-extrabold px-2 py-0.5 rounded-full"
@@ -249,6 +259,6 @@ export default function PatientsPage() {
       </main>
 
       <AssistantChat lang={lang} />
-    </div>
+    </Aurora>
   );
 }

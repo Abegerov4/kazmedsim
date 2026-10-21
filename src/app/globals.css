@@ -72,7 +72,7 @@ html { -webkit-text-size-adjust: 100%; }
 body {
   background: var(--bg);
   color: var(--ink);
-  font-family: "Plus Jakarta Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-family: "Onest", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   font-feature-settings: "ss01", "cv05";
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
@@ -240,7 +240,70 @@ body {
   animation: shimmer 1.5s infinite linear;
 }
 
+/* ── 21st.dev-inspired motion layer ────────────────────────── */
+
+.font-display { font-family: "Unbounded", "Onest", sans-serif; letter-spacing: -0.02em; }
+
+/* Aurora lights (components/ui/aurora.tsx) */
+@keyframes aurora-drift {
+  0%   { transform: translate(0, 0) rotate(0deg) scale(1); }
+  33%  { transform: translate(18%, 12%) rotate(40deg) scale(1.12); }
+  66%  { transform: translate(-10%, 20%) rotate(-30deg) scale(.92); }
+  100% { transform: translate(0, 0) rotate(0deg) scale(1); }
+}
+.animate-aurora { animation: aurora-drift 22s ease-in-out infinite; will-change: transform; }
+
+/* Shimmer headline (components/ui/shimmer-text.tsx) */
+@keyframes shimmer-sweep {
+  from { background-position: 200% 0; }
+  to   { background-position: -200% 0; }
+}
+.shimmer-text {
+  background: linear-gradient(100deg,
+    var(--primary-deep) 0%, var(--primary-deep) 38%,
+    #7FD8E6 50%,
+    var(--primary-deep) 62%, var(--primary-deep) 100%);
+  background-size: 200% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: shimmer-sweep 3.2s linear infinite;
+}
+
+/* Travelling border light (components/ui/animated-border.tsx) */
+@property --border-angle {
+  syntax: "<angle>";
+  inherits: false;
+  initial-value: 0deg;
+}
+@keyframes border-spin { to { --border-angle: 360deg; } }
+.animated-border {
+  padding: 1.5px;
+  background:
+    conic-gradient(from var(--border-angle),
+      var(--border-soft) 0deg, var(--border-soft) 250deg,
+      var(--primary-bright) 300deg, var(--mint) 330deg, var(--border-soft) 360deg);
+  animation: border-spin 5s linear infinite;
+  box-shadow: var(--shadow-lg);
+}
+
+/* Glass header */
+.glass {
+  background: rgba(255,255,255,.62);
+  -webkit-backdrop-filter: saturate(1.6) blur(16px);
+  backdrop-filter: saturate(1.6) blur(16px);
+}
+
+/* Subtle dot grid behind content */
+.dot-grid {
+  background-image: radial-gradient(rgba(21,36,59,.09) 1px, transparent 1px);
+  background-size: 22px 22px;
+  -webkit-mask-image: radial-gradient(ellipse 70% 60% at 50% 40%, #000 30%, transparent 100%);
+  mask-image: radial-gradient(ellipse 70% 60% at 50% 40%, #000 30%, transparent 100%);
+}
+
 @media (prefers-reduced-motion: reduce) {
+  .animate-aurora, .shimmer-text, .animated-border { animation: none !important; }
   *, *::before, *::after { animation-duration: .001ms !important; animation-iteration-count: 1 !important; transition-duration: .001ms !important; }
   /* The ECG pulse is a core brand element — keep it running even with reduced motion */
   .ecg-line { animation: ecg-draw 5s ease-in-out infinite !important; }
