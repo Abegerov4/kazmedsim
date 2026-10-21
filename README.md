@@ -1,208 +1,236 @@
-# KazMedSim
+<div align="center">
 
-A browser-based clinical simulator for Kazakh medical students. Trilingual
-(Russian / Kazakh / English), tool-using AI agents, voice + text patient
-interaction, 49 protocol-driven scenarios across seven specialties.
+# КазМедСим · KazMedSim
 
-Students chat with a virtual patient (typed or by voice), conduct physical
-exam, order labs, choose diagnosis and treatment from a formulary, and
-receive a structured debrief from an AI mentor grounded in MoH RK protocol
-PDFs.
+**Симулятор поликлиники для студентов-медиков Казахстана: живой ИИ-пациент, осмотр, анализы, диагноз и разбор от ИИ-куратора.**<br>
+Студент ведёт приём текстом или голосом, назначает исследования и лечение, а куратор оценивает приём по 5 рубрикам с опорой на клинические протоколы МЗ РК.
 
-## Features
+![сценарии](https://img.shields.io/badge/сценарии-49%20·%207%20специальностей-1B7A8F)
+![протоколы](https://img.shields.io/badge/протоколы%20МЗ%20РК-19%20PDF%20·%202%20586%20фрагментов-1B7A8F)
+![формуляр](https://img.shields.io/badge/формуляр-51%20препарат-3FA98C)
+![языки](https://img.shields.io/badge/языки-RU%20·%20KZ%20·%20EN-3FA98C)
+![голос](https://img.shields.io/badge/голос-WebRTC%20·%20gpt--realtime-E97356)
+![evals](https://img.shields.io/badge/eval--фикстуры%20куратора-5-2e7d32)
 
-- **49 clinical scenarios** across 7 specialties (internal medicine,
-  cardiology, pulmonology, neurology, endocrinology, gastroenterology,
-  infectious disease) — 7 cases each
-- **Conversational patient (text mode)** powered by Claude Sonnet 4.6, with
-  **token-by-token streaming** over SSE — the reply types out like ChatGPT
-  instead of appearing in one chunk
-- **Voice mode** — full WebRTC voice conversation with the patient via
-  OpenAI `gpt-realtime`. Browser-side echo cancellation + half-duplex
-  mic-muting during patient speech, transcripts of both sides logged into
-  the session for grading
-- **Physical exam tab** — vitals (HR, BP, SpO₂, temp, RR) plus inspection,
-  auscultation, palpation, percussion findings per scenario
-- **Selectable labs** — student picks specific tests from a shuffled list
-  mixed with distractor / over-prescribed tests; grader counts excess and
-  omissions
-- **Diagnosis picker + medication formulary** (40 drugs grouped by class)
-  replaces free-text entry
-- **Session timer** — 8-minute target window. Too short = penalty for
-  shallow anamnesis; too long = penalty for inefficient consultation
-- **AI medical assistant** with tool use (see below)
-- **Structured grading** — Claude Sonnet with Anthropic tool-use forces a
-  schema'd `submit_grade` output. 5 rubrics (anamnesis / communication /
-  reasoning / diagnosis / treatment), each 0–10, with bilingual feedback
-- **RAG over MoH RK protocols** — 19 official protocol PDFs (~620 pages)
-  chunked, embedded with `text-embedding-3-small`, and queried by the
-  assistant's `search_medical_protocol` tool
-- **Prompt caching + telemetry** — Anthropic `cache_control: ephemeral`
-  on the static patient persona + grader rubric; per-call token / cost /
-  cache-hit metrics logged to `db/events.jsonl`
-- **Evals** — 5 fixture sessions in `evals/` with expected score ranges,
-  so prompt edits can be regression-tested
-- **Trilingual** — every label, prompt, scenario, and grader output exists
-  in `ru`, `kk`, and `en`
+**[▶ Открыть демо](https://frontend-production-360e3.up.railway.app)**
 
-## AI Agent (tool use)
+</div>
 
-The assistant chat on `/patients` is a tool-using agent (OpenAI `gpt-4o-mini`
-with function calling). Three deterministic tools ground its answers:
+[Деплой](docs/DEPLOY.md) · [Eval-набор куратора](evals/README.md) · [Протоколы для RAG](docs/protocols/README.md)
 
-| Tool | What it does |
+![Главная страница КазМедСим](docs/screenshots/hero.png)
+
+## Проблема за 20 секунд
+
+Студент медвуза до ординатуры почти не ведёт приём сам. Сбор анамнеза, выбор нужных анализов и план лечения отрабатываются на разборах «по бумаге», где нет живого пациента, нет таймера и нет обратной связи по каждому шагу. Ошибка на реальном приёме стоит дорого, а тренироваться на реальных пациентах нельзя.
+
+**КазМедСим** — тренажёр клинического приёма участкового врача. Пациент отвечает как человек: рассказывает только то, о чём спросили, может волноваться и не знает медицинских терминов. Анализы приходят только назначенные, среди них есть лишние «ловушки». В конце ИИ-куратор разбирает приём по 5 рубрикам и объясняет, что было хорошо и что исправить.
+
+## Что умеет
+
+### 1. Очередь пациентов
+
+49 случаев из практики поликлиники, по 7 в каждой из семи специальностей: терапия, кардиология, пульмонология, неврология, эндокринология, гастроэнтерология, инфекционные болезни. У каждого случая есть сложность и срочность. Правильный диагноз до конца приёма не виден: API отдаёт только публичные поля сценария.
+
+![Очередь пациентов](docs/screenshots/patients.png)
+
+### 2. Приём: ИИ-пациент текстом или голосом
+
+Пациент отвечает по своей легенде: жалобы, анамнез, привычки, тревоги. Ответ приходит потоком по SSE и печатается по мере генерации. Кнопка 🎤 открывает голосовой разговор через WebRTC и OpenAI Realtime: эхо подавляется, пока говорит пациент, микрофон приглушается, а расшифровка обеих сторон сохраняется для оценки.
+
+Вся переписка доступна в панели «История». Горячие клавиши: `/` — ввод, `1`–`4` — инструменты, `H` — история, `V` — голос, `Esc` — закрыть.
+
+<table>
+<tr>
+<td width="50%"><img src="docs/screenshots/session.png" alt="Приём пациента"></td>
+<td width="50%"><img src="docs/screenshots/history.png" alt="История приёма"></td>
+</tr>
+<tr>
+<td align="center"><sub>Пациент отвечает на вопрос о курении; над репликой — последний вопрос врача</sub></td>
+<td align="center"><sub>Панель «История»: весь диалог в один клик</sub></td>
+</tr>
+</table>
+
+### 3. Осмотр, анализы и диагноз
+
+- **Осмотр:** витальные показатели (ЧСС, АД, SpO₂, температура, ЧДД) с подсветкой отклонений, плюс общий осмотр, аускультация, пальпация и перкуссия для каждого случая.
+- **Анализы:** студент сам выбирает исследования из перемешанного списка, где есть лишние и избыточные тесты (МРТ всего тела, ПЭТ-КТ, онкомаркеры). Результаты приходят с нормой и отклонением, рентген и ЭКГ — со снимком. Лишние назначения и пропуски куратор учитывает.
+- **Диагноз и лечение:** выбор диагноза с кодом МКБ-10 из правдоподобных вариантов и назначение лечения из формуляра на 51 препарат, сгруппированного по классам.
+
+<table>
+<tr>
+<td width="33%"><img src="docs/screenshots/exam.png" alt="Осмотр"></td>
+<td width="33%"><img src="docs/screenshots/labs.png" alt="Анализы"></td>
+<td width="33%"><img src="docs/screenshots/diagnosis.png" alt="Диагноз и лечение"></td>
+</tr>
+<tr>
+<td align="center"><sub>Витальные показатели и физикальный осмотр</sub></td>
+<td align="center"><sub>Назначенные анализы и рентген ОГК</sub></td>
+<td align="center"><sub>Диагноз J18.1 и лечение из формуляра</sub></td>
+</tr>
+</table>
+
+### 4. Разбор от ИИ-куратора
+
+После завершения куратор оценивает приём по 5 рубрикам, каждая от 0 до 10:
+
+1. сбор анамнеза;
+2. общение с пациентом;
+3. клиническое мышление (включая лишние и пропущенные анализы);
+4. точность диагноза;
+5. адекватность лечения.
+
+Учитывается и время приёма: целевое окно — 8 минут. Слишком короткий приём означает поверхностный анамнез, слишком длинный — неэффективную консультацию. По каждой рубрике куратор пишет, что получилось и что улучшить, на языке студента.
+
+<table>
+<tr>
+<td width="50%"><img src="docs/screenshots/grading.png" alt="Куратор оценивает"></td>
+<td width="50%"><img src="docs/screenshots/grade.png" alt="Итоговая оценка"></td>
+</tr>
+<tr>
+<td align="center"><sub>Шаги проверки, пока куратор оценивает</sub></td>
+<td align="center"><sub>Вердикт, оценки по доменам и детализация</sub></td>
+</tr>
+</table>
+
+### 5. ИИ-ассистент с инструментами
+
+На странице пациентов есть плавающий чат-ассистент. Это агент с function calling, который не отвечает «по памяти», а вызывает детерминированные инструменты. Под ответом видно, какие инструменты он использовал.
+
+| Инструмент | Что делает |
 |---|---|
-| `search_medical_protocol(condition)` | Hybrid: RAG over the 2 586 MoH RK protocol chunks first, then keyword fallback over scenarios DB, then an emergency catalog (anaphylaxis, CPR, septic shock, AKI, acute HF) |
-| `clinical_calculator(name, params)` | CHA₂DS₂-VASc, Wells DVT, qSOFA, eGFR (CKD-EPI 2021), HEART score |
-| `drug_interactions(drugs)` | Pairwise interactions against a 27-entry catalog with class-aware matching (warfarin × NSAID, statin × macrolide, etc.) |
+| `search_medical_protocol(condition)` | Гибридный поиск: RAG по 2 586 фрагментам 19 протоколов МЗ РК, затем поиск по базе сценариев, затем каталог неотложных состояний (анафилаксия, СЛР, септический шок, ОДСН, ОПП) |
+| `clinical_calculator(name, params)` | 5 шкал: CHA₂DS₂-VASc, Wells (ТГВ), qSOFA, eGFR (CKD-EPI 2021), HEART |
+| `drug_interactions(drugs)` | Попарные взаимодействия по каталогу из 27 пар с учётом классов (варфарин × НПВП, статин × макролид и др.) |
 
-The UI shows chips under each answer indicating which tools were consulted,
-so students can see when the model relies on grounded data vs its own memory.
+## Как это устроено
 
-## Tech stack
+```mermaid
+flowchart LR
+    S([Студент]) --> UI[Next.js 16<br/><sub>сцена приёма, панели, разбор</sub>]
 
-| Layer | Stack |
-|---|---|
-| Frontend | Next.js 16, React 19, TypeScript, Tailwind CSS v4 |
-| Backend | FastAPI, Uvicorn, Python 3.12+ |
-| Patient (text) + Grader LLM | Anthropic Claude Sonnet 4.6 (streaming via SSE) |
-| Patient (voice) | OpenAI `gpt-realtime` over WebRTC |
-| Assistant LLM | OpenAI `gpt-4o-mini` with function calling |
-| Transcription | OpenAI `gpt-4o-mini-transcribe` |
-| Embeddings (RAG) | OpenAI `text-embedding-3-small` |
-| PDF parsing | PyMuPDF |
-| Database | SQLite (single file, no migration tooling) |
+    UI -->|SSE| P[Пациент<br/><sub>gpt-4o-mini, потоковый ответ</sub>]
+    UI -->|WebRTC| V[Голосовой пациент<br/><sub>gpt-realtime, временный ключ</sub>]
+    V -->|расшифровка| LOG[(SQLite<br/><sub>сценарии, сессии, диалог</sub>)]
+    P --> LOG
 
-## Quick start
+    UI --> G[Куратор<br/><sub>gpt-4o-mini, принудительный<br/>вызов submit_grade</sub>]
+    LOG --> G
+    G --> R([5 рубрик · отзыв])
 
-### 1. Install
+    UI --> A[Ассистент-агент<br/><sub>gpt-4o-mini + function calling</sub>]
+    A <--> T1[search_medical_protocol]
+    A <--> T2[clinical_calculator]
+    A <--> T3[drug_interactions]
+    T1 <--> RAG[(Протоколы МЗ РК<br/><sub>text-embedding-3-small,<br/>косинусный поиск</sub>)]
+```
+
+- **Структурированная оценка.** Куратор не пишет свободный markdown, который «плывёт» между языками. Модель обязана вызвать инструмент `submit_grade` (`tool_choice` принудительный) со схемой: оценка, «что хорошо» и «что улучшить» по каждой рубрике, итог и рекомендация. Текст отзыва собирается из этих полей в коде.
+- **Кэширование промптов.** Статичная часть (легенда пациента, правила рубрик) стоит в начале промпта, поэтому OpenAI автоматически кэширует общий префикс между вызовами. Токены, стоимость и попадания в кэш каждого вызова пишутся в `db/events.jsonl`, сводку строит `scripts/telemetry_summary.py`.
+- **RAG по протоколам.** 19 официальных PDF (около 620 страниц) разбиты на фрагменты PyMuPDF, проиндексированы `text-embedding-3-small` и хранятся прямо в SQLite. Поиск — косинусное сходство в памяти, без отдельной векторной БД.
+- **Голос без ключа в браузере.** Бэкенд выдаёт короткоживущий `client_secret` OpenAI Realtime, а браузер соединяется с моделью напрямую по WebRTC.
+- **Студент не видит ответ заранее.** Список сценариев и старт сессии отдают только публичные поля, правильный диагноз и эталон лечения остаются на сервере до оценки.
+- **Три языка целиком.** Интерфейс, легенды пациентов, промпты (пациент, куратор, ассистент × ru/kk/en) и отзыв куратора существуют на русском, казахском и английском.
+
+## Проверка качества
+
+Оценки LLM шумные, поэтому куратор покрыт регрессионным набором `evals/`: 5 вручную составленных приёмов (хорошие и плохие) с ожидаемыми диапазонами баллов по каждой рубрике. Цель — не угадать точный балл, а поймать качественную регрессию: если правка промпта начнёт поощрять плохой анамнез или штрафовать верный диагноз, прогон упадёт.
 
 ```bash
-npm install                              # frontend
+.venv/bin/python -m evals.run            # все фикстуры параллельно
+.venv/bin/python -m evals.run -k pneumon # по подстроке имени
+.venv/bin/python -m evals.run -v         # с отзывом куратора для упавших
+```
+
+Код возврата 0, если всё прошло, иначе 1 — готово для CI.
+
+> **Честно о границах.** 5 фикстур — маленький набор, он ловит грубые регрессии, но не гарантирует точность оценки на любом приёме. Клинические случаи синтетические, хотя сверены с протоколами МЗ РК. Это учебный тренажёр, а не клиническая система.
+
+## Стек
+
+| Слой | Технологии |
+|---|---|
+| Фронтенд | Next.js 16 (App Router), React 19, TypeScript, Tailwind CSS 4, Motion |
+| Бэкенд | FastAPI, Uvicorn, Python 3.12+, Server-Sent Events |
+| Пациент, куратор, ассистент | OpenAI `gpt-4o-mini` (function calling) |
+| Голосовой режим | OpenAI `gpt-realtime` по WebRTC |
+| RAG | `text-embedding-3-small`, PyMuPDF, косинусный поиск в памяти |
+| Данные | SQLite: сценарии, сессии, диалоги, фрагменты протоколов |
+| Инфраструктура | Railway |
+
+## Быстрый старт
+
+```bash
+# 1. Зависимости
+npm install
 python -m venv .venv && source .venv/bin/activate
-pip install -r backend/requirements.txt  # backend
+pip install -r backend/requirements.txt
+
+# 2. Ключи
+cp .env.local.example .env.local   # впишите OPENAI_API_KEY
 ```
 
-### 2. Configure secrets
+База `db/kazmedsim.db` лежит в репозитории: в ней уже 49 сценариев и индекс протоколов, сидить ничего не нужно.
 
 ```bash
-cp .env.local.example .env.local
+# 3. Запуск, два терминала
+uvicorn backend.main:app --reload --reload-dir backend   # API на :8000
+npm run dev                                              # сайт на :3000
 ```
 
-Edit `.env.local` — required keys:
+Откройте http://localhost:3000. Swagger API: http://localhost:8000/docs.
 
-```env
-ANTHROPIC_API_KEY=sk-ant-...
-OPENAI_API_KEY=sk-proj-...
-NEXT_PUBLIC_API_URL=http://localhost:8000
-```
+`--reload-dir backend` обязателен: без него uvicorn следит и за `.venv` и бесконечно перезапускается.
 
-### 3. Database
-
-`db/kazmedsim.db` (21 MB) is committed to git with all 49 scenarios and
-2 586 protocol RAG chunks pre-loaded, so no seeding is needed for a fresh
-clone. If you want to rebuild from scratch:
+<details>
+<summary>Пересобрать базу с нуля</summary>
 
 ```bash
-python scripts/seed_db.py            # base scenarios
-python scripts/seed_scenarios_v2.py  # +35 cases to fill out all specialties
-python scripts/ingest_protocols.py   # re-build RAG embeddings (needs PDFs in docs/protocols/)
+python scripts/seed_db.py            # базовые сценарии
+python scripts/seed_scenarios_v2.py  # ещё 35 случаев до 7 на специальность
+python scripts/ingest_protocols.py   # эмбеддинги протоколов (PDF в docs/protocols/)
 ```
 
-### 4. Run (two terminals)
-
-```bash
-# Terminal 1 — backend
-source .venv/bin/activate
-uvicorn backend.main:app --reload --reload-dir backend
-
-# Terminal 2 — frontend
-npm run dev
-```
-
-Open http://localhost:3000.
-
-## User flow
-
-1. **Home** — pick language (RU/KK/EN), enter student name, start session
-2. **Intro** — 3 onboarding screens explaining the simulator
-3. **Patients** — browse scenarios filtered by specialty; floating AI
-   assistant chat available for questions
-4. **Session** — 2D consultation room with the patient seated. Bottom HUD:
-   Record / Examination / Labs / Diagnosis tabs, auto-growing text input,
-   and a 🎤 Voice button that opens a full WebRTC voice call with the
-   patient. 8-minute timer counts down at the top
-5. **Grade** — five-rubric scorecard with concise feedback (collapsible
-   detail) from the Claude mentor
-
-## Project layout
-
-```
-backend/                FastAPI app
-  main.py                 Routes (sessions, labs, grade, assistant, realtime)
-  scenarios.py            DB access for scenarios
-  grader.py               Claude tool-use grader with structured output
-  assistant_tools.py      3 tools + OpenAI schemas for the agent
-  rag.py                  In-memory cosine search over protocol_chunks
-  telemetry.py            Per-call cost / cache / token logger
-  prompts/                System prompts: patient/grader/assistant × ru/kk/en
-db/
-  schema.sql              Tables: scenarios, sessions, dialog_log, protocol_chunks
-  kazmedsim.db            SQLite (committed — seeded with scenarios + RAG index)
-  events.jsonl            Telemetry log (gitignored)
-docs/
-  DEPLOY.md               Step-by-step Vercel + Railway deploy guide
-  protocols/              MoH RK PDFs (gitignored — only the embeddings ship)
-evals/
-  fixtures.py             5 fixture sessions with expected score ranges
-  run.py                  Grader regression suite
-public/labs/              X-ray and ECG images shown alongside lab results
-scripts/
-  seed_db.py                     Base scenarios
-  seed_scenarios_v2.py           Additional 35 scenarios (idempotent)
-  ingest_protocols.py            PDF → chunks → embeddings → DB
-  translate_to_en.py             Batch-translate scenarios + labs to English
-  translate_clinical_data_en.py  Inject EN strings into src/lib/clinicalData.ts
-  telemetry_summary.py           Roll up events.jsonl into a cost/cache report
-src/
-  app/                    Next.js App Router pages (intro, patients, session, grade)
-  components/
-    AssistantChat.tsx       Floating assistant on /patients
-    PatientCard.tsx         Scenario card on the queue
-    VoiceMode.tsx           WebRTC voice overlay (OpenAI Realtime)
-    MedIcon.tsx             SVG icon set
-  lib/
-    api.ts                  Typed HTTP client (incl. SSE streaming)
-    clinicalData.ts         Diagnosis options, formulary, exam findings, distractor tests
-```
+</details>
 
 ## API
 
 ```
 GET  /api/scenarios?lang=ru&specialty=cardiology
-POST /api/session/start            { scenario_id, student_name, language }
-POST /api/session/message          { session_id, message }              → SSE stream
+POST /api/session/start      { scenario_id, student_name, language }
+POST /api/session/message    { session_id, message }                → SSE-поток
 GET  /api/session/{id}/labs
-POST /api/session/end              { session_id, student_diagnosis, student_treatment,
-                                     ordered_tests, examined, elapsed_seconds }
-POST /api/assistant                { messages: [{role, content}], language }
-POST /api/realtime/session         { session_id }   → short-lived OpenAI client_secret
-POST /api/session/log_turn         { session_id, role, text }   ← voice transcripts
+POST /api/session/end        { session_id, student_diagnosis, student_treatment,
+                               ordered_tests, examined, elapsed_seconds }
+POST /api/assistant          { messages: [{role, content}], language }
+POST /api/realtime/session   { session_id }   → временный client_secret OpenAI
+POST /api/session/log_turn   { session_id, role, text }   ← расшифровки голоса
 ```
 
-`/api/session/message` returns `text/event-stream` with `data: {"delta": "..."}`
-events as the patient reply is generated, terminated by `data: {"done": true}`.
+`/api/session/message` отдаёт `text/event-stream` с событиями `data: {"delta": "..."}` и завершающим `data: {"done": true}`.
 
-OpenAPI/Swagger UI: http://localhost:8000/docs
+## Структура
 
-## Deployment
+```
+backend/
+  main.py              маршруты: сессии, анализы, оценка, ассистент, realtime
+  grader.py            куратор: принудительный вызов submit_grade
+  assistant_tools.py   3 инструмента ассистента и их схемы
+  rag.py               косинусный поиск по фрагментам протоколов
+  telemetry.py         токены, стоимость и кэш каждого вызова
+  prompts/             промпты пациента, куратора и ассистента × ru/kk/en
+db/
+  schema.sql           таблицы: scenarios, sessions, dialog_log, protocol_chunks
+  kazmedsim.db         SQLite со сценариями и RAG-индексом
+evals/                 регрессионный набор куратора
+public/labs/           рентгены и ЭКГ к результатам анализов
+scripts/               сид сценариев, загрузка протоколов, переводы, сводка телеметрии
+src/
+  app/                 страницы: главная, вступление, пациенты, приём, разбор
+  components/          ассистент, карточка пациента, голосовой режим, UI-эффекты
+  lib/                 API-клиент с SSE, клинические данные и формуляр
+```
 
-See [docs/DEPLOY.md](docs/DEPLOY.md). Production runs on Vercel (Next.js
-frontend) + Railway (FastAPI backend). The seed DB ships in git so Railway
-boots with all 49 scenarios + RAG index immediately, no migration step.
+## Дисклеймер
 
-## Disclaimer
-
-For educational use only. Clinical content is synthetic and curated against
-MoH RK protocols and international guidelines, but is not a substitute for
-clinical judgment or official documentation.
+Только для обучения. Проект не аффилирован с МЗ РК. Клинические случаи синтетические и сверены с протоколами МЗ РК и международными рекомендациями, но не заменяют клиническое мышление и официальные документы.
